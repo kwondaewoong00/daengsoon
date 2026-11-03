@@ -43,7 +43,14 @@ export class Hands {
     this.group.visible = false;
   }
 
-  get busy() { return this.t >= 0; }
+  get busy() { return this.t >= 0 || this.warmT >= 0; }
+  private warmT = -1;
+  /** 손만 올려 불을 쬐는 동작(종이 없음), 약 4초 */
+  warm() {
+    if (this.busy) return;
+    this.warmT = 0;
+    this.group.visible = true;
+  }
 
   /** 시작. 카메라 로컬 좌표계에서 움직임 */
   start(def: ItemDef, onTear: () => void, onThrow: (l: THREE.Mesh, r: THREE.Mesh) => void) {
@@ -61,6 +68,20 @@ export class Hands {
   }
 
   update(dt: number) {
+    if (this.warmT >= 0) {
+      this.warmT += dt;
+      const T = this.warmT;
+      const up = T < 0.8 ? ease(T / 0.8) : T < 3.4 ? 1 : T < 4.2 ? 1 - ease((T - 3.4) / 0.8) : -1;
+      if (up < 0) { this.warmT = -1; this.group.visible = false; return; }
+      const y = -0.5 + 0.3 * up, z = -0.55, spread = 0.16;
+      const wob = Math.sin(T * 1.7) * 0.01;
+      this.handL.position.set(-spread, y + wob, z);
+      this.handR.position.set(spread, y - wob, z);
+      // 손바닥을 불 쪽으로(앞으로 펴서 살짝 안으로)
+      this.handL.rotation.set(-0.9, 0.35, 0.1);
+      this.handR.rotation.set(-0.9, -0.35, -0.1);
+      return;
+    }
     if (this.t < 0) return;
     this.t += dt;
     const T = this.t;

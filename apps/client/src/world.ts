@@ -3,7 +3,7 @@ import { BRAZIERS, SEATS, WORLD, itemById, seatById, type ItemId, type PlayerSta
 import { Stage } from "./three/scene";
 import { Fire3D } from "./three/fire";
 import { Character } from "./three/character";
-import { CampDecor, Motes, makeBraziers, makeGroundDressing, makeStumps, makeSurroundings, windUniform, type Stump } from "./three/props";
+import { CampDecor, Motes, StarField, makeBraziers, makeGroundDressing, makeStumps, makeSurroundings, windUniform, type Stump } from "./three/props";
 import { CameraRig } from "./three/camera";
 import { BurnFx, halfPaperGeo, paperMaterial } from "./three/fx";
 import { Hands } from "./three/hands";
@@ -23,6 +23,10 @@ export class World {
   private dressing: (THREE.Group & { grass?: THREE.InstancedMesh[] }) | null = null;
   private motes: Motes | null = null;
   private decor: CampDecor | null = null;
+  private props: THREE.Group | null = null;
+  private stars: StarField | null = null;
+  private coals: THREE.Mesh[] = [];
+  roomLabel = "캠프";
   private grass: THREE.InstancedMesh[] = [];
   private grassFull = 0;
   private built = false;
@@ -60,7 +64,12 @@ export class World {
         if (near > 0.05) this.onCrackle?.(strength, near);
       };
     }
-    for (const g of makeBraziers()) this.stage.scene.add(g);
+    for (const g of makeBraziers()) {
+      this.stage.scene.add(g);
+      g.traverse((o) => { if (o.name === "coal") this.coals.push(o as THREE.Mesh); });
+    }
+    this.stars = new StarField(new THREE.Vector3((WORLD.w * S) / 2, 0, (WORLD.h * S) / 2));
+    this.stage.scene.add(this.stars.group);
     this.stumps = makeStumps();
     for (const s of this.stumps) this.stage.scene.add(s.mesh);
     this.stage.scene.add(this.fx.group);
@@ -86,6 +95,9 @@ export class World {
     if (this.decor) this.stage.scene.remove(this.decor.group);
     this.decor = new CampDecor(k);
     this.stage.scene.add(this.decor.group);
+    if (this.props) this.stage.scene.remove(this.props);
+    this.props = CampDecor.props(k, this.roomLabel);
+    this.stage.scene.add(this.props);
     if (this.motes) this.stage.scene.remove(this.motes.points);
     this.motes = new Motes(k);
     this.stage.scene.add(this.motes.points);
@@ -250,6 +262,17 @@ export class World {
     windUniform.value = this.t;
     this.motes?.update(this.t);
     this.decor?.update(this.t);
+    this.stars?.update(this.t, dt);
+    // 숯불 숨쉬기
+    for (let i = 0; i < this.coals.length; i++) {
+      const m = this.coals[i].material as THREE.MeshStandardMaterial;
+      m.emissiveIntensity = 0.9 + 0.6 * Math.sin(this.t * (1.1 + (i % 5) * 0.3) + i);
+    }
+    // 앉아서 가만히 있으면 가끔 손을 올려 불을 쬠
+    if (this.rig.focused && !this.hands.busy) {
+      this.idleWarm -= dt;
+      if (this.idleWarm <= 0) { this.hands.warm(); this.idleWarm = 14 + Math.random() * 14; }
+    } else this.idleWarm = 6;
     this.stage.tick(this.t);
     if (this.water) {
       (this.water.material as THREE.ShaderMaterial).uniforms.uTime.value = this.t;
@@ -284,6 +307,18 @@ export class World {
       tag.style.transform = `translate(-50%, -100%) translate(${x.toFixed(0)}px, ${y.toFixed(0)}px)`;
       tag.style.opacity = String(Math.max(0.25, 1 - dist / 16));
     }
+  }
+
+  private idleWarm = 6;
+
+  /** 이정표 글자 바꾸기(캠프 배정 뒤) */
+  setRoomLabel(name: string) {
+    if (name === this.roomLabel) return;
+    this.roomLabel = name;
+    if (!this.built) return;
+    if (this.props) this.stage.scene.remove(this.props);
+    this.props = CampDecor.props(this._kind, name);
+    this.stage.scene.add(this.props);
   }
 
   /** 가장 가까운 화로까지의 거리(월드 단위) */

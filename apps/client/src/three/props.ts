@@ -30,6 +30,18 @@ export function makeBrazier(b: Brazier): THREE.Group {
     const bed = new THREE.Mesh(new THREE.CylinderGeometry(0.72, 0.72, 0.06, 16), charMat);
     bed.position.y = 0.03;
     g.add(bed);
+    // 숯불: 벌겋게 빛나는 알갱이들
+    const coalGeo = new THREE.DodecahedronGeometry(0.06, 0);
+    for (let i = 0; i < 22; i++) {
+      const heat = Math.random();
+      const coal = new THREE.Mesh(coalGeo, new THREE.MeshStandardMaterial({ color: 0x3a1a0a, emissive: new THREE.Color().setHSL(0.04 + heat * 0.04, 1, 0.3 + heat * 0.25), emissiveIntensity: 0.8 + heat, roughness: 1 }));
+      const a = Math.random() * Math.PI * 2, r = Math.random() * 0.5;
+      coal.position.set(Math.cos(a) * r, 0.08, Math.sin(a) * r);
+      coal.rotation.set(Math.random(), Math.random(), Math.random());
+      coal.scale.setScalar(0.7 + Math.random() * 0.8);
+      coal.name = "coal";
+      g.add(coal);
+    }
     for (const r of [-0.4, 0.5, 0.05, 1.3]) {
       const log = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.08, 1.0, 7), logMat);
       log.rotation.z = Math.PI / 2;
@@ -381,7 +393,7 @@ export class CampDecor {
     }
     const bulbGeo = new THREE.BufferGeometry();
     bulbGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(positions), 3));
-    const bulbMat = new THREE.PointsMaterial({ size: 0.11, map: glowTexture(), color: 0xffd9a0, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true });
+    const bulbMat = new THREE.PointsMaterial({ size: 0.07, map: glowTexture(), color: 0xffd9a0, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true });
     this.bulbs = new THREE.Points(bulbGeo, bulbMat);
     this.group.add(this.bulbs);
     // --- 랜턴: 큰 화로 옆 그루터기 하나씩 ---
@@ -409,10 +421,138 @@ export class CampDecor {
       this.group.add(l);
     }
   }
+  /** 장작 더미(큰 화로 옆), 이정표, 바다엔 보트·부표·조개 */
+  static props(kind: SceneKind, roomLabel: string): THREE.Group {
+    const g = new THREE.Group();
+    const W = WORLD.w * S, H = WORLD.h * S;
+    const logMat = new THREE.MeshStandardMaterial({ color: 0x6b4a2c, roughness: 1 });
+    const logEnd = new THREE.MeshStandardMaterial({ color: 0xb08a5a, roughness: 1 });
+    const logGeo = new THREE.CylinderGeometry(0.09, 0.09, 0.7, 8);
+    for (const b of BRAZIERS) {
+      if (b.size !== "large") continue;
+      const pile = new THREE.Group();
+      for (let row = 0; row < 3; row++) for (let i = 0; i < 4 - row; i++) {
+        const log = new THREE.Mesh(logGeo, [logMat, logEnd, logEnd]);
+        log.rotation.z = Math.PI / 2;
+        log.position.set(i * 0.19 + row * 0.095 - 0.3, 0.09 + row * 0.16, (Math.random() - 0.5) * 0.04);
+        pile.add(log);
+      }
+      const seat = b.seats[3];
+      pile.position.set(seat.x * S + 0.9, 0, seat.y * S + 0.5);
+      pile.rotation.y = Math.random() * 0.6;
+      g.add(pile);
+    }
+    // 이정표: 입구(남쪽 가운데)
+    {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 1.7, 7), logMat);
+      post.position.set(W / 2 + 2.2, 0.85, H - 0.6);
+      const c = document.createElement("canvas"); c.width = 256; c.height = 96;
+      const ctx = c.getContext("2d")!;
+      ctx.fillStyle = "#c9a870"; ctx.fillRect(0, 0, 256, 96);
+      ctx.fillStyle = "#3a2a1a"; ctx.font = "700 44px 'Jua', sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(roomLabel, 128, 50);
+      const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+      const board = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.4, 0.05), [logMat, logMat, logMat, logMat, new THREE.MeshStandardMaterial({ map: tex, roughness: 1 }), logMat]);
+      board.position.set(W / 2 + 2.2, 1.45, H - 0.6);
+      board.rotation.y = Math.PI;
+      g.add(post, board);
+    }
+    if (kind === "sea") {
+      // 뒤집어 둔 나룻배
+      const hull = new THREE.Mesh(new THREE.CapsuleGeometry(0.55, 2.2, 4, 10), new THREE.MeshStandardMaterial({ color: 0x5a7a8a, roughness: 0.9 }));
+      hull.rotation.z = Math.PI / 2; hull.rotation.y = 0.5;
+      hull.scale.set(1, 0.55, 1);
+      hull.position.set(W * 0.12, 0.28, H * 0.42);
+      const keel = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.06, 0.14), logMat);
+      keel.rotation.y = 0.5; keel.position.set(W * 0.12, 0.58, H * 0.42);
+      g.add(hull, keel);
+      // 부표 둘
+      for (const [bx, bz, col] of [[W * 0.9, H * 0.3, 0xe0523a], [W * 0.78, H * 0.18, 0xf2c14e]] as const) {
+        const buoy = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 10), new THREE.MeshStandardMaterial({ color: col, roughness: 0.8 }));
+        buoy.position.set(bx, 0.26, bz);
+        const stripe = new THREE.Mesh(new THREE.CylinderGeometry(0.31, 0.31, 0.1, 12), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8 }));
+        stripe.position.set(bx, 0.26, bz);
+        g.add(buoy, stripe);
+      }
+      // 조개껍데기
+      const shellMat = new THREE.MeshStandardMaterial({ color: 0xf3e9dc, roughness: 0.6 });
+      for (let i = 0; i < 40; i++) {
+        const sh = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6, 0, Math.PI * 2, 0, Math.PI / 2), shellMat);
+        sh.position.set(Math.random() * W, 0.01, 1.5 + Math.random() * 6);
+        sh.scale.set(1, 0.5, 1.2);
+        sh.rotation.y = Math.random() * Math.PI;
+        g.add(sh);
+      }
+    }
+    return g;
+  }
+
   update(t: number) {
     if (this.bulbs) (this.bulbs.material as THREE.PointsMaterial).opacity = 0.85 + Math.sin(t * 2.1) * 0.08 + Math.sin(t * 7.3) * 0.04;
     for (const [i, g] of this.tentGlows.entries()) g.material.opacity = 0.4 + Math.sin(t * 0.9 + i) * 0.06;
     for (const [i, g] of this.lanternGlows.entries()) g.material.opacity = 0.45 + Math.sin(t * 5 + i * 2) * 0.08 + Math.random() * 0.03;
+  }
+}
+
+/**
+ * 별: 하늘 사진 위에 반짝이는 별 300개를 세 겹으로 겹쳐(겹마다 다른 박자로 밝기 변화) 깜빡이게.
+ * 별똥별: 20~50초에 한 번 짧은 선이 하늘을 가로지름.
+ */
+export class StarField {
+  readonly group = new THREE.Group();
+  private layers: THREE.Points[] = [];
+  private shooter: THREE.Line;
+  private shootT = -1;
+  private nextShoot = 8 + Math.random() * 20;
+  private from = new THREE.Vector3();
+  private dir = new THREE.Vector3();
+  constructor(center: THREE.Vector3) {
+    for (let L = 0; L < 3; L++) {
+      const n = 100;
+      const pos = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const el = 0.12 + Math.random() * 1.3; // 지평선 위 7도~80도
+        const r = 320;
+        pos[i * 3] = center.x + Math.cos(a) * Math.cos(el) * r;
+        pos[i * 3 + 1] = Math.sin(el) * r;
+        pos[i * 3 + 2] = center.z + Math.sin(a) * Math.cos(el) * r;
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+      const mat = new THREE.PointsMaterial({ size: 1.6 + L * 0.5, map: glowTexture(), color: L === 1 ? 0xdfe6ff : 0xfff4e0, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
+      const pts = new THREE.Points(geo, mat);
+      pts.frustumCulled = false;
+      this.layers.push(pts);
+      this.group.add(pts);
+    }
+    const sg = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+    this.shooter = new THREE.Line(sg, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, fog: false }));
+    this.shooter.frustumCulled = false;
+    this.group.add(this.shooter);
+    this.center = center;
+  }
+  private center: THREE.Vector3;
+  update(t: number, dt: number) {
+    this.layers.forEach((l, i) => { (l.material as THREE.PointsMaterial).opacity = 0.55 + 0.35 * Math.sin(t * (0.9 + i * 0.6) + i * 2); });
+    this.nextShoot -= dt;
+    if (this.nextShoot <= 0 && this.shootT < 0) {
+      this.shootT = 0;
+      const a = Math.random() * Math.PI * 2, el = 0.5 + Math.random() * 0.7;
+      this.from.set(this.center.x + Math.cos(a) * Math.cos(el) * 300, Math.sin(el) * 300, this.center.z + Math.sin(a) * Math.cos(el) * 300);
+      this.dir.set(Math.random() - 0.5, -0.35 - Math.random() * 0.3, Math.random() - 0.5).normalize();
+      this.nextShoot = 20 + Math.random() * 30;
+    }
+    if (this.shootT >= 0) {
+      this.shootT += dt;
+      const k = this.shootT / 0.9;
+      const head = this.from.clone().addScaledVector(this.dir, k * 90);
+      const tail = head.clone().addScaledVector(this.dir, -14);
+      const pos = this.shooter.geometry.attributes.position as THREE.BufferAttribute;
+      pos.setXYZ(0, tail.x, tail.y, tail.z); pos.setXYZ(1, head.x, head.y, head.z); pos.needsUpdate = true;
+      (this.shooter.material as THREE.LineBasicMaterial).opacity = Math.sin(Math.min(1, k) * Math.PI) * 0.9;
+      if (k >= 1) { this.shootT = -1; (this.shooter.material as THREE.LineBasicMaterial).opacity = 0; }
+    }
   }
 }
 

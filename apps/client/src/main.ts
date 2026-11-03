@@ -181,6 +181,7 @@ function onMessage(msg: ServerMessage) {
 
 function setRoom(r: RoomInfo) {
   room = r;
+  world.setRoomLabel(r.name);
   roomNameEl.textContent = r.name;
   viewerCount.textContent = String(r.count);
   document.title = `댕순 — ${r.name} · ${r.count}명이 함께`;
