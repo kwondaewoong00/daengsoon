@@ -46,9 +46,13 @@ export class Stage {
   async setKind(kind: SceneKind): Promise<void> {
     this.kind = kind;
     const sky = skyFor(kind);
+    this.skyYaw = sky.yaw;
     const ground = groundFor(kind, currentSeason());
     await Promise.all([this.loadSky(sky.id, sky.exposure, sky.bg, sky.env), this.loadGround(ground.id, ground.repeat, kind)]);
-    this.scene.fog = new THREE.FogExp2(kind === "sea" ? 0x0a1420 : 0x0b0a10, kind === "sea" ? 0.014 : 0.02);
+    this.scene.fog = new THREE.FogExp2(kind === "sea" ? 0x6a5c80 : 0x0b0a10, kind === "sea" ? 0.0038 : 0.02);
+    // 바다는 보랏빛 저녁 하늘이 반구광에도 배게
+    this.hemi.color.set(kind === "sea" ? 0x9a86b4 : 0x8c90c0);
+    this.hemi.groundColor.set(kind === "sea" ? 0x4a3c30 : 0x3a2e22);
   }
 
   private async loadSky(id: string, exposure: number, bg: number, envIntensity: number) {
@@ -106,9 +110,11 @@ export class Stage {
   }
 
   /** 배경(하늘)을 아주 천천히 돌려 구름·별이 흐르게. 한 바퀴에 약 40분 */
+  /** 하늘 사진에서 가장 밝은 곳(해/달)을 어느 방향에 둘지. 바다는 북쪽(바다 쪽)에 노을이 오게 */
+  skyYaw = 0;
   tick(t: number) {
-    this.scene.backgroundRotation.set(0, t * 0.0026, 0);
-    this.scene.environmentRotation.set(0, t * 0.0026, 0);
+    this.scene.backgroundRotation.set(0, this.skyYaw + t * 0.0026, 0);
+    this.scene.environmentRotation.set(0, this.skyYaw + t * 0.0026, 0);
     this.moon.intensity = 0.55 + Math.sin(t * 0.11) * 0.05;
   }
 

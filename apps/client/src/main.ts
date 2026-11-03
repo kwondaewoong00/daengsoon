@@ -2,6 +2,7 @@ import { ITEMS, BRAZIERS, SCENES, roomKind, roomIdValid, roomNumber, makeRoomId,
 import { Ambience } from "./audio";
 import { RoomSocket } from "./socket";
 import { LocalServer } from "./demo";
+import { paperTexture } from "./three/fx";
 import { World } from "./world";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -40,7 +41,11 @@ const DEMO = import.meta.env.VITE_DEMO === "1" || new URLSearchParams(location.s
 
 const params = new URLSearchParams(location.search);
 // 자동 테스트용: ?debug 일 때만 월드를 밖으로 노출
-if (params.has("debug")) (window as unknown as { __world?: World }).__world = world;
+if (params.has("debug")) {
+  (window as unknown as { __world?: World }).__world = world;
+  (window as unknown as { __paperTex?: () => Record<string, string> }).__paperTex = () =>
+    Object.fromEntries(ITEMS.map((i) => [i.id, (paperTexture(i).image as HTMLCanvasElement).toDataURL("image/png")]));
+}
 
 // ---------- 첫 화면(로비) ----------
 const wantedRoom = params.get("room") && roomIdValid(params.get("room")!) ? params.get("room")! : "auto";

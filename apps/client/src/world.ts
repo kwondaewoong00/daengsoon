@@ -77,6 +77,12 @@ export class World {
     this.motes = new Motes(k);
     this.stage.scene.add(this.motes.points);
     const sur = makeSurroundings(k);
+    if (k === "sea") {
+      const wet = new THREE.Mesh(new THREE.PlaneGeometry(60, 2.2), new THREE.MeshStandardMaterial({ color: 0x6a7a86, roughness: 0.25, transparent: true, opacity: 0.45 }));
+      wet.rotation.x = -Math.PI / 2;
+      wet.position.set((WORLD.w * S) / 2, 0.012, 2.4 + 1.0);
+      sur.group.add(wet);
+    }
     this.surroundings = sur.group;
     this.water = sur.water;
     this.stage.scene.add(sur.group);
@@ -224,7 +230,15 @@ export class World {
     windUniform.value = this.t;
     this.motes?.update(this.t);
     this.stage.tick(this.t);
-    if (this.water) ((this.water.material as THREE.ShaderMaterial).uniforms.uTime.value = this.t);
+    if (this.water) {
+      (this.water.material as THREE.ShaderMaterial).uniforms.uTime.value = this.t;
+      // 등대: 4초에 한 번 스윽 비침
+      const k = Math.pow(Math.max(0, Math.sin(this.t * (Math.PI / 2))), 8);
+      const beacon = this.surroundings?.getObjectByName("beacon") as THREE.PointLight | undefined;
+      if (beacon) beacon.intensity = k * 120;
+      const bulb = this.surroundings?.getObjectByName("beaconBulb") as THREE.Mesh | undefined;
+      if (bulb) (bulb.material as THREE.MeshBasicMaterial).color.setScalar(0.3 + k * 0.7);
+    }
     // 앉은 자리의 그루터기는 캐릭터 밑에 그대로 둠(앉아 있는 모습). 빈 자리만 하이라이트 가능
     this.stage.render(this.rig.camera);
   }

@@ -137,7 +137,7 @@ export function makeGroundDressing(kind: SceneKind): THREE.Group {
   const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 
   // --- 풀 ---
-  const count = kind === "mountain" ? 2200 : 500;
+  const count = kind === "mountain" ? 2200 : 260;
   const plane = new THREE.PlaneGeometry(0.42, 0.34);
   plane.translate(0, 0.17, 0);
   const grassMat = new THREE.MeshStandardMaterial({
@@ -170,7 +170,7 @@ export function makeGroundDressing(kind: SceneKind): THREE.Group {
     const x = rnd(-margin, W + margin), z = rnd(-margin, H + margin);
     if (avoid(x, z)) continue;
     const yaw = Math.random() * Math.PI;
-    const sc = rnd(0.7, 1.5);
+    const sc = rnd(0.7, 1.5) * (kind === "sea" ? 0.7 : 1);
     pos.set(x, 0, z); scl.set(sc, sc * rnd(0.8, 1.3), sc);
     q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
     a.setMatrixAt(placed, m.compose(pos, q, scl));
@@ -387,53 +387,99 @@ export function makeSurroundings(kind: SceneKind): { group: THREE.Group; water: 
       g.add(m);
     }
   } else {
-    // 바다: 북쪽(z 작은 쪽) 모래 끝에서 바다가 시작
-    const shore = -2; // 월드 z=0 에서 2m 더 간 곳
-    const geo = new THREE.PlaneGeometry(400, 200, 80, 40);
+    // 바다: 북쪽(z 작은 쪽) 모래 끝에서 바다가 시작. 양옆으로도 넓게 펼쳐지고, 해 지는 쪽으로 빛기둥이 비침
+    const shore = 2.4; // 걸을 수 있는 땅(HORIZON_Y) 바로 너머에서 바다 시작
+    const geo = new THREE.PlaneGeometry(4000, 2000, 160, 80);
     const mat = new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 },
-        uColorDeep: { value: new THREE.Color(0x061626) },
-        uColorShallow: { value: new THREE.Color(0x173a4d) },
-        uFoam: { value: new THREE.Color(0x9fc3d6) },
-        uFog: { value: new THREE.Color(0x0a1420) },
+        uColorDeep: { value: new THREE.Color(0x1c3f5e) },
+        uColorShallow: { value: new THREE.Color(0x2f7a86) },
+        uFoam: { value: new THREE.Color(0xdbe9ee) },
+        uSun: { value: new THREE.Color(0xffb26a) },
+        uSky: { value: new THREE.Color(0x8d7aa3) },
+        uFog: { value: new THREE.Color(0x6a5c80) },
+        uSunDir: { value: new THREE.Vector2(0.25, -1).normalize() },
       },
       vertexShader: /* glsl */ `
-        uniform float uTime; varying float vH; varying vec2 vUv; varying float vDist;
+        uniform float uTime; varying float vH; varying vec2 vUv; varying float vDist; varying vec3 vWorld;
         void main(){
           vUv = uv;
           vec3 p = position;
-          float w = sin(p.x*0.35 + uTime*0.9)*0.12 + sin(p.y*0.5 - uTime*0.7)*0.1 + sin((p.x+p.y)*0.15 + uTime*0.4)*0.15;
+          float w = sin(p.x*0.22 + uTime*0.9)*0.16 + sin(p.y*0.35 - uTime*0.7)*0.12 + sin((p.x+p.y)*0.1 + uTime*0.4)*0.2 + sin(p.x*0.9 - uTime*1.6)*0.04;
+          w *= smoothstep(0.0, 0.08, 1.0 - uv.y) ;
           p.z += w; vH = w;
-          vec4 mv = modelViewMatrix * vec4(p,1.0);
+          vec4 wp = modelMatrix * vec4(p,1.0); vWorld = wp.xyz;
+          vec4 mv = viewMatrix * wp;
           vDist = -mv.z;
           gl_Position = projectionMatrix * mv;
         }`,
       fragmentShader: /* glsl */ `
-        uniform vec3 uColorDeep, uColorShallow, uFoam, uFog; uniform float uTime; varying float vH; varying vec2 vUv; varying float vDist;
+        uniform vec3 uColorDeep, uColorShallow, uFoam, uSun, uSky, uFog; uniform vec2 uSunDir; uniform float uTime;
+        varying float vH; varying vec2 vUv; varying float vDist; varying vec3 vWorld;
         void main(){
-          float shore = smoothstep(0.0, 0.08, vUv.y); // uv.y=0 이 해안
+          float shore = smoothstep(0.0, 0.012, vUv.y);
           vec3 c = mix(uColorShallow, uColorDeep, shore);
-          c += uFoam * smoothstep(0.08, 0.22, vH + 0.1) * 0.25;
-          float foamLine = (1.0 - smoothstep(0.0, 0.025 + sin(uTime*0.8)*0.008, vUv.y)) * 0.5;
-          c = mix(c, uFoam, foamLine);
-          float fog = 1.0 - exp(-pow(vDist * 0.014, 2.0));
+          // 프레넬: 비스듬히 볼수록(멀수록) 하늘빛을 비춤 → 먼 바다가 검지 않고 하늘과 이어짐
+          vec3 v = normalize(cameraPosition - vWorld);
+          float fres = pow(1.0 - max(0.0, v.y), 2.2);
+          c = mix(c, uSky, fres * 0.75);
+          // 물결 마루에 거품
+          c += uFoam * smoothstep(0.14, 0.3, vH + 0.1) * 0.22;
+          // 해안 거품선(두 줄, 밀려왔다 빠짐)
+          float f1 = (1.0 - smoothstep(0.0, 0.003 + sin(uTime*0.8)*0.001, vUv.y)) * 0.6;
+          float f2 = (1.0 - smoothstep(0.005, 0.008 + sin(uTime*0.6+1.0)*0.0012, vUv.y)) * 0.25 * step(0.003, vUv.y);
+          c = mix(c, uFoam, f1 + f2);
+          // 해 반사 기둥: 해 방향으로 뻗은 띠, 물결에 따라 반짝
+          vec2 d = normalize(vWorld.xz - vec2(14.0, 0.0));
+          float along = max(0.0, dot(d, uSunDir));
+          float band = pow(along, 24.0);
+          float glint = smoothstep(0.05, 0.25, vH + 0.08) * (0.5 + 0.5*sin(vWorld.x*3.1 + uTime*2.2) * sin(vWorld.z*2.3 - uTime*1.7));
+          c += uSun * band * (0.35 + glint * 0.9);
+          float fog = 1.0 - exp(-pow(vDist * 0.006, 2.0));
           c = mix(c, uFog, fog);
           gl_FragColor = vec4(c, 1.0);
         }`,
     });
     water = new THREE.Mesh(geo, mat);
     water.rotation.x = -Math.PI / 2;
-    water.position.set(cx, 0.02, shore - 100);
+    water.position.set(cx, 0.02, shore - 1000);
     g.add(water);
-    // 바위 몇 개
+    // 먼 섬 실루엣 둘 + 등대(불빛 깜빡)
+    const isleMat = new THREE.MeshStandardMaterial({ color: 0x1c2436, roughness: 1, flatShading: true });
+    for (const [ox, oz, r, h] of [[-90, -150, 40, 9], [70, -190, 55, 13], [160, -120, 25, 6]] as const) {
+      const isle = new THREE.Mesh(new THREE.ConeGeometry(r, h, 6), isleMat);
+      isle.position.set(cx + ox, h / 2 - 1, oz);
+      isle.rotation.y = Math.random();
+      g.add(isle);
+    }
+    const lhMat = new THREE.MeshStandardMaterial({ color: 0xd8d2c6, roughness: 0.9 });
+    const lh = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.8, 14, 10), lhMat);
+    lh.position.set(cx + 70, 7 + 12, -190);
+    g.add(lh);
+    const beacon = new THREE.PointLight(0xfff0c0, 0, 400, 1.2);
+    beacon.position.set(cx + 70, 27, -190);
+    beacon.name = "beacon";
+    g.add(beacon);
+    const beaconBulb = new THREE.Mesh(new THREE.SphereGeometry(1.2, 10, 8), new THREE.MeshBasicMaterial({ color: 0xfff0c0 }));
+    beaconBulb.position.copy(beacon.position);
+    beaconBulb.name = "beaconBulb";
+    g.add(beaconBulb);
+    // 바위 + 유목
     const rockMat = new THREE.MeshStandardMaterial({ color: 0x3f3a36, roughness: 1, flatShading: true });
-    for (let i = 0; i < 24; i++) {
-      const r = new THREE.Mesh(new THREE.DodecahedronGeometry(0.4 + Math.random() * 0.9, 0), rockMat);
+    for (let i = 0; i < 30; i++) {
+      const r = new THREE.Mesh(new THREE.DodecahedronGeometry(0.15 + Math.random() * 0.35, 0), rockMat);
       const side = Math.random() < 0.5 ? -1 : 1;
-      r.position.set(cx + side * (16 + Math.random() * 10), 0.2, cz + (Math.random() - 0.5) * 30);
+      r.position.set(cx + side * (15 + Math.random() * 12), 0.1, cz + (Math.random() - 0.5) * 34);
       r.rotation.set(Math.random(), Math.random(), Math.random());
       g.add(r);
+    }
+    const driftMat = new THREE.MeshStandardMaterial({ color: 0x8a7a66, roughness: 1 });
+    for (let i = 0; i < 6; i++) {
+      const d = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.18, 2 + Math.random() * 2, 7), driftMat);
+      d.position.set(cx + (Math.random() - 0.5) * 30, 0.14, 1.5 + Math.random() * 3);
+      d.rotation.set(0, Math.random() * Math.PI, Math.PI / 2 + (Math.random() - 0.5) * 0.2);
+      g.add(d);
     }
   }
   return { group: g, water };

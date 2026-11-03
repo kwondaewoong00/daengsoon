@@ -51,7 +51,7 @@ export class Hands {
     if (this.whole) { this.group.remove(this.whole); }
     this.mat = paperMaterial(def);
     // 한 장을 두 손 사이(카메라 로컬)에 들고 있음. 찢는 순간 반쪽 둘로 바뀜
-    this.whole = new THREE.Mesh(wholePaperGeo(0.15, 0.2), this.mat);
+    this.whole = new THREE.Mesh(wholePaperGeo(0.165, 0.22), this.mat);
     this.group.add(this.whole);
     this.onTear = onTear;
     this.onThrow = onThrow;
@@ -101,8 +101,8 @@ export class Hands {
     if (!this.whole || !this.mat) return;
     this.group.remove(this.whole);
     this.whole = null;
-    this.paperL = new THREE.Mesh(halfPaperGeo("L", 0.15, 0.2), this.mat);
-    this.paperR = new THREE.Mesh(halfPaperGeo("R", 0.15, 0.2), this.mat);
+    this.paperL = new THREE.Mesh(halfPaperGeo("L", 0.165, 0.22), this.mat);
+    this.paperR = new THREE.Mesh(halfPaperGeo("R", 0.165, 0.22), this.mat);
     this.paperL.position.set(0.045, 0.07, 0.03);
     this.paperR.position.set(-0.045, 0.07, 0.03);
     this.handL.add(this.paperL);

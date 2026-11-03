@@ -31,6 +31,10 @@ export function groundFor(kind: SceneKind, season: Season): { id: string; repeat
  */
 export function skyFor(kind: SceneKind, hour = new Date().getHours()) {
   const late = hour >= 22 || hour < 5;
-  const id = kind === "sea" ? (late ? "moonlit_golf" : "dikhololo_night") : late ? "satara_night" : "kloppenheim_02";
-  return { id, env: 1.0, bg: 1.0, exposure: late ? 0.9 : 1.05 };
+  // 바다는 땅이 없는 '하늘만' 사진(puresky): 초저녁 보랏빛 노을, 늦은 밤 달과 별. 수평선 아래는 우리 바다가 채움
+  const id = kind === "sea" ? (late ? "qwantani_night_puresky" : "kloppenheim_07_puresky") : late ? "satara_night" : "kloppenheim_02";
+  // 사진에서 해/달이 있는 가로 위치(u, 0~1). 바다는 그걸 북쪽(바다 쪽)으로 돌려 둠
+  const sunU: Record<string, number> = { kloppenheim_07_puresky: 0.578, qwantani_night_puresky: 0.614, kloppenheim_02: 0.599, satara_night: 0.523 };
+  const yaw = kind === "sea" ? (sunU[id] - 0.5) * Math.PI * 2 + Math.PI / 2 : 0;
+  return { id, env: 1.0, bg: 1.0, exposure: kind === "sea" && !late ? 1.15 : late ? 0.9 : 1.05, yaw };
 }
