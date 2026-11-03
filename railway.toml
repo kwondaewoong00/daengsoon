@@ -1,0 +1,8 @@
+# Railway. New Project → Deploy from GitHub repo → 이 저장소. Dockerfile을 자동으로 씁니다.
+[build]
+builder = "DOCKERFILE"
+
+[deploy]
+healthcheckPath = "/healthz"
+healthcheckTimeout = 60
+restartPolicyType = "ON_FAILURE"

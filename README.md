@@ -91,7 +91,8 @@ pnpm build && pnpm start   # 서버 하나가 전부 서빙 → http://localhost
 
 ## 배포
 
-`Dockerfile`로 Fly.io, Railway, Render 등 **긴 연결을 유지할 수 있는** 곳에 올립니다.
+**[DEPLOY.md](./DEPLOY.md)** 를 보세요. Railway 기준 5분이면 24시간 돌아갑니다.
+`Dockerfile` 하나로 어디든 올라가고, `render.yaml` · `railway.toml` · `fly.toml` 이 들어 있습니다.
 (Vercel 같은 서버리스는 WebSocket을 오래 못 잡아두므로 맞지 않습니다.)
 
 ## 다음 후보

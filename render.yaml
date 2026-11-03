@@ -1,0 +1,9 @@
+# Render.com 블루프린트. 대시보드에서 New → Blueprint → 이 저장소 선택하면 그대로 올라갑니다.
+services:
+  - type: web
+    name: daengsoon
+    runtime: docker
+    plan: starter          # 무료(free)로 바꿔도 되지만 15분 쉬면 잠들어 첫 손님이 1분 기다립니다
+    region: singapore      # 한국에서 가장 가까운 지역
+    healthCheckPath: /healthz
+    autoDeploy: true
