@@ -85,7 +85,7 @@ export class CameraRig {
       // 시선: 불꽃 아랫부분(장작 위). 고개를 돌리면 그 방향으로
       const toFire = Math.atan2(-nz, -nx) + this.headTurn;
       const lookDist = small ? 0.9 : 1.6;
-      const lookH = (small ? 0.75 : 0.55) - Math.abs(this.headTurn) * 0.15;
+      const lookH = (small ? 0.6 : 0.45) - Math.abs(this.headTurn) * 0.15;
       this.targetLook.set(sx + Math.cos(toFire) * lookDist, lookH, sz + Math.sin(toFire) * lookDist);
       // 손을 뗀 뒤 천천히 불 쪽으로 돌아옴
       this.headTurn *= 1 - Math.min(1, dt * 0.35);

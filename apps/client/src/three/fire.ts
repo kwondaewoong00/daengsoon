@@ -135,11 +135,16 @@ export class Fire3D {
     this.group.position.set(brazier.x * S, 0, brazier.y * S);
   }
 
+  /** 뭔가 들어왔다: 색 플래시 + 2.5초 솟구침 + 불똥 연타 */
   burn(color: string) {
     this.flash = 1;
+    this.surge = 1;
     this.flashColor.set(color);
     this.pop(1);
+    this.popQueue = [0.18, 0.4, 0.75];
   }
+  private surge = 0;
+  private popQueue: number[] = [];
 
   // ---------- 생성 ----------
   private spawnFlame(i: number, lifeK = 0) {
@@ -198,13 +203,18 @@ export class Fire3D {
     this.t += dt;
     const t = this.t;
     this.flash = Math.max(0, this.flash - dt * 0.7);
+    this.surge = Math.max(0, this.surge - dt * 0.4);
     this.popKick = Math.max(0, this.popKick - dt * 3);
+    if (this.popQueue.length) {
+      this.popQueue = this.popQueue.map((x) => x - dt);
+      while (this.popQueue.length && this.popQueue[0] <= 0) { this.popQueue.shift(); this.pop(0.7 + Math.random() * 0.3); }
+    }
 
     // 돌풍: 불이 커졌다 작아졌다 출렁임 + 옆으로 쏠림
     const gust = 0.75 + 0.2 * Math.sin(t * 0.9) + 0.12 * Math.sin(t * 2.3 + 1.3) + 0.08 * Math.sin(t * 5.1);
     const swayX = Math.sin(t * 1.7) * 0.35 + Math.sin(t * 0.6) * 0.2;
     const swayZ = Math.cos(t * 1.3) * 0.25;
-    const power = gust + this.flash * 0.9;
+    const power = gust + this.flash * 0.9 + this.surge * 0.7;
 
     // 1) 불꽃
     const f = this.flames;
@@ -219,6 +229,8 @@ export class Fire3D {
       f.vel[i * 3 + 2] += (swayZ * y + Math.cos(t * 5 + y * 3 + i * 0.7) * 0.3) * dt;
       f.pos[i * 3] += f.vel[i * 3] * dt;
       f.pos[i * 3 + 1] += f.vel[i * 3 + 1] * dt * power * speedUp;
+      // 솟구칠 때는 불꽃이 더 크게
+      f.alpha[i] *= 1 + this.surge * 0.25;
       f.pos[i * 3 + 2] += f.vel[i * 3 + 2] * dt;
       // 크기: 태어나서 잠깐 커졌다가 작아짐. 알파: 서서히 사라짐
       const grow = k < 0.25 ? 0.7 + k * 1.2 : 1 - (k - 0.25) * 0.9;
@@ -284,7 +296,7 @@ export class Fire3D {
 
     // 빛: 저주파 흔들림 + 고주파 떨림 + 타닥 튐 + 플래시
     const flicker = 0.82 + 0.1 * gust + Math.sin(t * 11) * 0.05 + Math.sin(t * 23.7) * 0.04 + Math.random() * 0.03;
-    this.light.intensity = this.baseIntensity * flicker * (1 + this.flash * 1.4 + this.popKick * 0.5);
+    this.light.intensity = this.baseIntensity * flicker * (1 + this.flash * 1.4 + this.popKick * 0.5 + this.surge * 0.6);
     this.light.color.lerpColors(new THREE.Color(0xff9a3c), this.flashColor, this.flash * 0.7);
     this.light.position.x = swayX * 0.08;
     this.light.position.z = swayZ * 0.08;

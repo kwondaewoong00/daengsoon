@@ -5,7 +5,8 @@ import { Fire3D } from "./three/fire";
 import { Character } from "./three/character";
 import { makeBraziers, makeGroundDressing, makeStumps, makeSurroundings, type Stump } from "./three/props";
 import { CameraRig } from "./three/camera";
-import { BurnFx } from "./three/fx";
+import { BurnFx, halfPaperGeo, paperMaterial } from "./three/fx";
+import { Hands } from "./three/hands";
 import { S } from "./three/config";
 
 /**
@@ -22,6 +23,9 @@ export class World {
   private dressing: THREE.Group | null = null;
   private water: THREE.Mesh | null = null;
   private fx = new BurnFx();
+  readonly hands = new Hands();
+  /** 찢는 순간(소리용) */
+  onTear: (() => void) | null = null;
   private raycaster = new THREE.Raycaster();
   private groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   private _kind: SceneKind = "mountain";
@@ -54,6 +58,8 @@ export class World {
     this.stumps = makeStumps();
     for (const s of this.stumps) this.stage.scene.add(s.mesh);
     this.stage.scene.add(this.fx.group);
+    this.rig.camera.add(this.hands.group);
+    this.stage.scene.add(this.rig.camera);
   }
 
   get kind() {
@@ -112,16 +118,48 @@ export class World {
     for (const id of [...this.chars.keys()]) this.remove(id);
   }
 
+  /** 누군가 태움. 나면 1인칭 손 시퀀스, 남이면 그 캐릭터의 찢어 넣기 동작 + 조각 비행 */
   burn(playerId: string, seatId: number, item: ItemId) {
     const seat = seatById(seatId);
     const def = itemById(item);
     if (!seat || !def) return;
     const fire = this.fires[seat.brazier];
-    const from = new THREE.Vector3(seat.x * S, 1.2, seat.y * S);
+    const to = new THREE.Vector3(fire.brazier.x * S, 0.45, fire.brazier.y * S);
+    const hit = () => fire.burn(def.flash);
+    if (playerId === this.selfId && this.rig.focused) {
+      this.hands.start(def, () => this.onTear?.(), (l, r) => {
+        // 손에서 떼어 월드로 옮긴 뒤 불로
+        for (const m of [l, r]) {
+          const from = new THREE.Vector3();
+          m.getWorldPosition(from);
+          const q = new THREE.Quaternion();
+          m.getWorldQuaternion(q);
+          m.parent?.remove(m);
+          m.quaternion.copy(q);
+          this.fx.throwMesh(m, from, to.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.2, 0, (Math.random() - 0.5) * 0.2)), hit, 0.65);
+        }
+      });
+      return;
+    }
     const c = this.chars.get(playerId);
-    if (c) c.headWorldPos(from);
-    const to = new THREE.Vector3(fire.brazier.x * S, 0.5, fire.brazier.y * S);
-    this.fx.throwItem(def, from, to, () => fire.burn(def.flash));
+    if (c) {
+      c.playTear();
+      // 던지는 시점(약 1.0초)에 손 위치에서 조각이 날아감
+      window.setTimeout(() => {
+        if (!this.chars.has(playerId)) return;
+        const mat = paperMaterial(def);
+        for (const side of ["L", "R"] as const) {
+          const from = new THREE.Vector3();
+          c.handWorldPos(side, from);
+          const m = new THREE.Mesh(halfPaperGeo(side, 0.16, 0.22), mat);
+          this.fx.throwMesh(m, from, to.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.2, 0, (Math.random() - 0.5) * 0.2)), hit, 0.7);
+        }
+        this.onTear?.();
+      }, 1000);
+      window.setTimeout(() => this.onTear?.(), 550);
+    } else {
+      hit();
+    }
   }
 
   // ---------- 입력 도우미 ----------
@@ -178,6 +216,7 @@ export class World {
     this.updateTags();
     for (const f of this.fires) f.update(dt);
     this.fx.update(dt);
+    this.hands.update(dt);
     if (this.water) ((this.water.material as THREE.ShaderMaterial).uniforms.uTime.value = this.t);
     // 앉은 자리의 그루터기는 캐릭터 밑에 그대로 둠(앉아 있는 모습). 빈 자리만 하이라이트 가능
     this.stage.render(this.rig.camera);

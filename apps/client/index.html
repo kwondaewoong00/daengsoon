@@ -51,28 +51,25 @@
           <div class="items" id="items"></div>
         </div>
 
-        <nav class="actions" aria-label="동작">
-          <button id="act-seat" class="act">
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><path d="M12 7v5l4 2v6M12 12l-4 2v6M6 20h12"/></svg>
-            <span id="act-seat-label">앉기</span>
-          </button>
-          <button id="act-burn" class="act">
-            <svg viewBox="0 0 24 24"><path d="M12 3c1 3 4 4 4 8a4 4 0 01-8 0c0-2 1-3 1-3s0 2 2 2c0-3-1-5 1-7z"/><path d="M8 14c-1 1-2 2.5-2 4a6 6 0 0012 0c0-1.5-1-3-2-4"/></svg>
-            <span>태우기</span>
-          </button>
-          <button id="act-look" class="act">
-            <svg viewBox="0 0 24 24"><path d="M2 12s4-6 10-6 10 6 10 6-4 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
-            <span>둘러보기</span>
-          </button>
-          <button id="act-camp" class="act">
-            <svg viewBox="0 0 24 24"><path d="M3 20l9-15 9 15H3z"/><path d="M9 20l3-6 3 6"/></svg>
-            <span>캠프</span>
-          </button>
-          <button id="act-more" class="act">
-            <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
-            <span>더 보기</span>
-          </button>
-        </nav>
+        <div class="controls">
+          <div id="joystick" class="joystick" aria-label="걷기 조이스틱"><div class="knob" id="knob"></div></div>
+          <div class="control-right">
+            <button id="act-stand" class="mini" hidden>
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><path d="M12 7v6l-3 7M12 13l3 7M8 10l4-2 4 2"/></svg>
+              <span>일어나기</span>
+            </button>
+            <button id="act-camp" class="mini">
+              <svg viewBox="0 0 24 24"><path d="M3 20l9-15 9 15H3z"/><path d="M9 20l3-6 3 6"/></svg>
+              <span>캠프</span>
+            </button>
+            <button id="act-main" class="big">
+              <svg id="icon-sit" viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><path d="M12 7v5l4 2v6M12 12l-4 2v6M6 20h12"/></svg>
+              <svg id="icon-burn" viewBox="0 0 24 24" hidden><path d="M12 3c1 3 4 4 4 8a4 4 0 01-8 0c0-2 1-3 1-3s0 2 2 2c0-3-1-5 1-7z"/><path d="M8 14c-1 1-2 2.5-2 4a6 6 0 0012 0c0-1.5-1-3-2-4"/></svg>
+              <span id="act-main-label">앉기</span>
+              <small id="act-main-sub">통나무 근처에서</small>
+            </button>
+          </div>
+        </div>
       </footer>
     </main>
 
@@ -87,27 +84,12 @@
         <div class="live"><span class="dot"></span><span id="live-text">불을 피우는 중…</span></div>
 
         <form id="entry-form" class="panel">
-          <h2>내 캐릭터</h2>
-
-          <label class="field">
-            <span class="field-label">별명</span>
-            <input id="nick" name="nick" type="text" maxlength="12" autocomplete="nickname" placeholder="예: 다정한 이끼" />
-          </label>
-
-          <div class="field">
-            <span class="field-label">동물 친구</span>
-            <div class="species" id="species-grid" role="radiogroup" aria-label="동물 친구"></div>
-          </div>
-
-          <div class="field">
-            <span class="field-label">옷 색</span>
-            <div class="swatches" id="swatches" role="radiogroup" aria-label="옷 색"></div>
-          </div>
-
+          <h2>누구신가요?</h2>
+          <p class="panel-sub">나이와 성별로 얼굴이 정해져요. 이름은 캠프에서 지어 줍니다.</p>
           <div class="field two">
             <div>
               <span class="field-label">나이</span>
-              <div class="chips small" id="age-chips">
+              <div class="chips" id="age-chips">
                 <label><input type="radio" name="age" value="10" /><span>10대</span></label>
                 <label><input type="radio" name="age" value="20" checked /><span>20대</span></label>
                 <label><input type="radio" name="age" value="30" /><span>30대</span></label>
@@ -118,13 +100,12 @@
             </div>
             <div>
               <span class="field-label">성별</span>
-              <div class="chips small">
+              <div class="chips">
                 <label><input type="radio" name="gender" value="m" checked /><span>남</span></label>
                 <label><input type="radio" name="gender" value="f" /><span>여</span></label>
               </div>
             </div>
           </div>
-
           <div class="field" id="kind-field">
             <span class="field-label">어디로 갈까요</span>
             <div class="chips kinds">
@@ -132,14 +113,8 @@
               <label><input type="radio" name="kind" value="sea" /><span>🌊 바다<small>파도 소리</small></span></label>
             </div>
           </div>
-
           <div class="cta">
-            <button type="submit" class="go" id="go-auto">바로 들어가기</button>
-            <button type="button" class="go secondary" id="go-friends">👫 친구랑 캠프 만들기</button>
-            <div class="code-row">
-              <input id="code" type="text" inputmode="numeric" placeholder="🔑 캠프 코드 (예: 산 37)" />
-              <button type="button" class="go secondary small" id="go-code">입장</button>
-            </div>
+            <button type="submit" class="go" id="go-auto">불 앞에 앉으러 가기</button>
           </div>
         </form>
         <p class="foot">설치 없이 폰 · PC 브라우저에서 바로</p>
@@ -148,10 +123,6 @@
 
     <dialog id="rooms" class="rooms">
       <h2>캠프 고르기</h2>
-      <div class="invite">
-        <div class="invite-text"><strong id="invite-name">이 캠프</strong><span id="invite-url" class="dim"></span></div>
-        <button id="invite-copy" class="pill">초대 링크 복사</button>
-      </div>
       <ul id="room-list"></ul>
       <button id="rooms-close" class="pill">닫기</button>
     </dialog>

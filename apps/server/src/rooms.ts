@@ -1,4 +1,4 @@
-import { PUBLIC_ROOMS, ROOM_CAPACITY, Room, makeRoomId, roomIdValid, roomKind, roomNumber, type RoomInfo, type SceneKind } from "@daengsoon/shared";
+import { MAX_ROOMS, ROOM_CAPACITY, Room, makeRoomId, roomIdValid, roomKind, type RoomInfo, type SceneKind } from "@daengsoon/shared";
 
 /**
  * RoomManager = 매표소. 방을 만들고, 빈자리 있는 방으로 안내합니다.
@@ -7,9 +7,8 @@ import { PUBLIC_ROOMS, ROOM_CAPACITY, Room, makeRoomId, roomIdValid, roomKind, r
 export class RoomManager {
   private rooms = new Map<string, Room>();
 
-  /** 공개 캠프만. 친구 캠프는 링크를 아는 사람만 */
   list(): RoomInfo[] {
-    return [...this.rooms.values()].filter((r) => roomNumber(r.id) <= PUBLIC_ROOMS).map((r) => r.info()).sort((a, b) => a.id.localeCompare(b.id));
+    return [...this.rooms.values()].map((r) => r.info()).sort((a, b) => a.id.localeCompare(b.id));
   }
   /** 전체 접속자 수(첫 화면의 "지금 N명") */
   totalCount(): number {
@@ -40,11 +39,11 @@ export class RoomManager {
   auto(kind: SceneKind): Room | undefined {
     let best: Room | undefined;
     for (const r of this.rooms.values()) {
-      if (r.full || roomKind(r.id) !== kind || roomNumber(r.id) > PUBLIC_ROOMS) continue; // 친구 캠프는 자동 배정 제외
+      if (r.full || roomKind(r.id) !== kind) continue;
       if (!best || r.players.size > best.players.size) best = r;
     }
     if (best) return best;
-    for (let n = 1; n <= PUBLIC_ROOMS; n++) {
+    for (let n = 1; n <= MAX_ROOMS; n++) {
       const id = makeRoomId(kind, n);
       if (!this.rooms.has(id)) return this.open(id);
     }

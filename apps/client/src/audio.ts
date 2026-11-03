@@ -50,6 +50,25 @@ export class Ambience {
     for (let i = 0; i < n; i++) this.crackle(t + i * (0.03 + Math.random() * 0.05), (0.25 + strength * 0.6) * nearness);
   }
 
+  /** 종이 찢는 "찌익": 노이즈를 짧게, 음높이가 내려가는 필터로 */
+  tear() {
+    if (!this.ctx || !this.enabled) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noiseBuffer!;
+    const bp = ctx.createBiquadFilter();
+    bp.type = "bandpass"; bp.Q.value = 2.5;
+    bp.frequency.setValueAtTime(2600, t);
+    bp.frequency.exponentialRampToValueAtTime(900, t + 0.35);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.5, t + 0.03);
+    g.gain.setValueAtTime(0.5, t + 0.25);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+    src.connect(bp).connect(g).connect(this.master!);
+    src.start(t); src.stop(t + 0.45);
+  }
+
   /** 무언가 태울 때 "화르륵" */
   whoosh() {
     if (!this.ctx || !this.enabled) return;
@@ -146,9 +165,11 @@ export class Ambience {
     osc.stop(at + 0.08);
   }
 
+  private noiseBuffer: AudioBuffer | null = null;
   private makeNoise(ctx: AudioContext) {
     const len = ctx.sampleRate * 2;
     const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    this.noiseBuffer = buf;
     const data = buf.getChannelData(0);
     let b0 = 0, b1 = 0, b2 = 0;
     for (let i = 0; i < len; i++) {
