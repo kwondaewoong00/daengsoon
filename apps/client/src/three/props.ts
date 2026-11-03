@@ -260,6 +260,27 @@ export function makeGroundDressing(kind: SceneKind): THREE.Group & { grass?: THR
   return g;
 }
 
+/** 빛 점 재질: 멀면 작고 가까우면 커지되, 화면에서 최대 maxPx 를 넘지 않음(코앞을 지나도 뭉개지지 않게) */
+export function glowPointsMaterial(opts: { size: number; maxPx: number; color?: number; vertexColors?: boolean }) {
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { uMap: { value: glowTexture() }, uSize: { value: opts.size }, uMaxPx: { value: opts.maxPx }, uColor: { value: new THREE.Color(opts.color ?? 0xffffff) }, uOpacity: { value: 1 } },
+    vertexShader: /* glsl */ `
+      uniform float uSize, uMaxPx; varying vec3 vColor;
+      ${opts.vertexColors ? "attribute vec3 color;" : ""}
+      void main(){
+        vColor = ${opts.vertexColors ? "color" : "vec3(1.0)"};
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        gl_PointSize = clamp(uSize * (390.0 / -mv.z), 1.5, uMaxPx);
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: /* glsl */ `
+      uniform sampler2D uMap; uniform vec3 uColor; uniform float uOpacity; varying vec3 vColor;
+      void main(){ vec4 t = texture2D(uMap, gl_PointCoord); gl_FragColor = vec4(uColor * vColor, t.a * uOpacity); }`,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  });
+  return mat;
+}
+
 /**
  * 공중에 떠다니는 빛. 산: 반딧불(초록, 느리게 깜빡). 공통: 불티(주황, 화로 위에서 높이 올라감).
  * 작은 Points 하나로 처리하고 매 프레임 위치만 갱신합니다.
@@ -293,7 +314,7 @@ export class Motes {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute("position", new THREE.BufferAttribute(this.pos, 3));
     geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
-    const mat = new THREE.PointsMaterial({ size: 0.09, map: glowTexture(), vertexColors: true, transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true });
+    const mat = glowPointsMaterial({ size: 0.09, maxPx: 9, vertexColors: true });
     this.points = new THREE.Points(geo, mat);
     this.points.frustumCulled = false;
     this.update(0);
@@ -393,7 +414,7 @@ export class CampDecor {
     }
     const bulbGeo = new THREE.BufferGeometry();
     bulbGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(positions), 3));
-    const bulbMat = new THREE.PointsMaterial({ size: 0.07, map: glowTexture(), color: 0xffd9a0, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true });
+    const bulbMat = glowPointsMaterial({ size: 0.08, maxPx: 12, color: 0xffd9a0 });
     this.bulbs = new THREE.Points(bulbGeo, bulbMat);
     this.group.add(this.bulbs);
     // --- 랜턴: 큰 화로 옆 그루터기 하나씩 ---
@@ -488,7 +509,7 @@ export class CampDecor {
   }
 
   update(t: number) {
-    if (this.bulbs) (this.bulbs.material as THREE.PointsMaterial).opacity = 0.85 + Math.sin(t * 2.1) * 0.08 + Math.sin(t * 7.3) * 0.04;
+    if (this.bulbs) (this.bulbs.material as THREE.ShaderMaterial).uniforms.uOpacity.value = 0.85 + Math.sin(t * 2.1) * 0.08 + Math.sin(t * 7.3) * 0.04;
     for (const [i, g] of this.tentGlows.entries()) g.material.opacity = 0.4 + Math.sin(t * 0.9 + i) * 0.06;
     for (const [i, g] of this.lanternGlows.entries()) g.material.opacity = 0.45 + Math.sin(t * 5 + i * 2) * 0.08 + Math.random() * 0.03;
   }
@@ -520,7 +541,8 @@ export class StarField {
       }
       const geo = new THREE.BufferGeometry();
       geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-      const mat = new THREE.PointsMaterial({ size: 1.6 + L * 0.5, map: glowTexture(), color: L === 1 ? 0xdfe6ff : 0xfff4e0, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
+      const mat = glowPointsMaterial({ size: 1.6 + L * 0.5, maxPx: 4, color: L === 1 ? 0xdfe6ff : 0xfff4e0 });
+      mat.fog = false;
       const pts = new THREE.Points(geo, mat);
       pts.frustumCulled = false;
       this.layers.push(pts);
@@ -534,7 +556,7 @@ export class StarField {
   }
   private center: THREE.Vector3;
   update(t: number, dt: number) {
-    this.layers.forEach((l, i) => { (l.material as THREE.PointsMaterial).opacity = 0.55 + 0.35 * Math.sin(t * (0.9 + i * 0.6) + i * 2); });
+    this.layers.forEach((l, i) => { (l.material as THREE.ShaderMaterial).uniforms.uOpacity.value = 0.55 + 0.35 * Math.sin(t * (0.9 + i * 0.6) + i * 2); });
     this.nextShoot -= dt;
     if (this.nextShoot <= 0 && this.shootT < 0) {
       this.shootT = 0;
@@ -645,7 +667,7 @@ export function makeSurroundings(kind: SceneKind): { group: THREE.Group; water: 
       uniforms: {
         uTime: { value: 0 },
         uColorDeep: { value: new THREE.Color(0x1c3f5e) },
-        uColorShallow: { value: new THREE.Color(0x2f7a86) },
+        uColorShallow: { value: new THREE.Color(0x3f93a0) },
         uFoam: { value: new THREE.Color(0xdbe9ee) },
         uSun: { value: new THREE.Color(0xffb26a) },
         uSky: { value: new THREE.Color(0x8d7aa3) },
@@ -657,7 +679,7 @@ export function makeSurroundings(kind: SceneKind): { group: THREE.Group; water: 
         void main(){
           vUv = uv;
           vec3 p = position;
-          float w = sin(p.x*0.22 + uTime*0.9)*0.16 + sin(p.y*0.35 - uTime*0.7)*0.12 + sin((p.x+p.y)*0.1 + uTime*0.4)*0.2 + sin(p.x*0.9 - uTime*1.6)*0.04;
+          float w = sin(p.x*0.22 + uTime*0.9)*0.22 + sin(p.y*0.35 - uTime*0.7)*0.16 + sin((p.x+p.y)*0.1 + uTime*0.4)*0.26 + sin(p.x*0.9 - uTime*1.6)*0.05;
           w *= smoothstep(0.0, 0.08, 1.0 - uv.y) ;
           p.z += w; vH = w;
           vec4 wp = modelMatrix * vec4(p,1.0); vWorld = wp.xyz;

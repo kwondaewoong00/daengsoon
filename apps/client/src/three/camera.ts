@@ -102,10 +102,10 @@ export class CameraRig {
       const px = this.followX * S, pz = this.followY * S;
       const fx = Math.cos(this.yaw), fz = Math.sin(this.yaw);
       // 낮게 서서 조금 위를 봄 → 하늘이 화면 위 1/3을 차지
-      const back = this.portrait ? 4.0 : 4.4;
-      const up = this.portrait ? 1.9 : 1.8;
+      const back = this.portrait ? 4.2 : 4.6;
+      const up = this.portrait ? 2.6 : 2.3;
       this.targetPos.set(px - fx * back, up, pz - fz * back);
-      this.targetLook.set(px + fx * 3.5, 1.7, pz + fz * 3.5);
+      this.targetLook.set(px + fx * 4.0, 1.75, pz + fz * 4.0);
     }
     const k = this.snap ? 1 : Math.min(1, dt * (seat ? 2.2 : 3.5));
     this.snap = false;
