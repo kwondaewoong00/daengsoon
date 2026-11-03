@@ -32,5 +32,5 @@ export function groundFor(kind: SceneKind, season: Season): { id: string; repeat
 export function skyFor(kind: SceneKind, hour = new Date().getHours()) {
   const late = hour >= 22 || hour < 5;
   const id = kind === "sea" ? (late ? "moonlit_golf" : "dikhololo_night") : late ? "satara_night" : "kloppenheim_02";
-  return { id, env: 1.0, bg: 1.0, exposure: 0.85 };
+  return { id, env: 1.0, bg: 1.0, exposure: late ? 0.9 : 1.05 };
 }

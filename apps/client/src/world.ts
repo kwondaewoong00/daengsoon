@@ -3,7 +3,7 @@ import { BRAZIERS, SEATS, WORLD, itemById, seatById, type ItemId, type PlayerSta
 import { Stage } from "./three/scene";
 import { Fire3D } from "./three/fire";
 import { Character } from "./three/character";
-import { makeBraziers, makeStumps, makeSurroundings, type Stump } from "./three/props";
+import { makeBraziers, makeGroundDressing, makeStumps, makeSurroundings, type Stump } from "./three/props";
 import { CameraRig } from "./three/camera";
 import { BurnFx } from "./three/fx";
 import { S } from "./three/config";
@@ -19,6 +19,7 @@ export class World {
   readonly chars = new Map<string, Character>();
   private stumps: Stump[];
   private surroundings: THREE.Group | null = null;
+  private dressing: THREE.Group | null = null;
   private water: THREE.Mesh | null = null;
   private fx = new BurnFx();
   private raycaster = new THREE.Raycaster();
@@ -62,6 +63,9 @@ export class World {
   async setKind(k: SceneKind) {
     this._kind = k;
     if (this.surroundings) this.stage.scene.remove(this.surroundings);
+    if (this.dressing) this.stage.scene.remove(this.dressing);
+    this.dressing = makeGroundDressing(k);
+    this.stage.scene.add(this.dressing);
     const sur = makeSurroundings(k);
     this.surroundings = sur.group;
     this.water = sur.water;

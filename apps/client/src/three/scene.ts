@@ -23,7 +23,7 @@ export class Stage {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: dpr < 1.5, powerPreference: "high-performance" });
     this.renderer.setPixelRatio(dpr);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 0.7;
+    this.renderer.toneMappingExposure = 1.0;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.pmrem = new THREE.PMREMGenerator(this.renderer);
     this.pmrem.compileEquirectangularShader();
@@ -31,10 +31,10 @@ export class Stage {
     this.scene.background = new THREE.Color(0x0a0806);
     this.scene.fog = new THREE.FogExp2(0x0b0a10, 0.02);
 
-    this.hemi = new THREE.HemisphereLight(0x5a5a78, 0x241a12, 0.55);
+    this.hemi = new THREE.HemisphereLight(0x8c90c0, 0x3a2e22, 0.9);
     this.scene.add(this.hemi);
-    this.moon = new THREE.DirectionalLight(0x9aa8d8, 0.22);
-    this.moon.position.set(-20, 30, -10);
+    this.moon = new THREE.DirectionalLight(0xffd9b0, 0.55);
+    this.moon.position.set(-25, 18, -30); // 지는 해 방향(북서)
     this.scene.add(this.moon);
   }
 
@@ -58,7 +58,7 @@ export class Stage {
     hdr.colorSpace = THREE.SRGBColorSpace;
     const env = this.pmrem.fromEquirectangular(hdr).texture;
     this.scene.environment = env;
-    this.scene.environmentIntensity = envIntensity;
+    this.scene.environmentIntensity = envIntensity * 1.3;
     this.scene.background = hdr;
     this.scene.backgroundIntensity = bg;
     this.scene.backgroundBlurriness = 0.02;
@@ -83,7 +83,8 @@ export class Stage {
     arm.channel = 0; // aoMap은 기본 uv1을 보므로 uv0을 쓰게
     const mat = new THREE.MeshStandardMaterial({
       // 모래는 반사율이 높아 불빛에 하얗게 날아가므로 살짝 눌러줌
-      color: kind === "sea" ? 0xbdb3a2 : 0xffffff,
+      // 가을 낙엽 바닥은 살짝 초록을 섞어 풀과 어울리게
+      color: kind === "sea" ? 0xc9bfae : 0xd8e0b8,
       map: diff,
       normalMap: nor,
       aoMap: arm,

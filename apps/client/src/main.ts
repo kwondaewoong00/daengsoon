@@ -8,9 +8,17 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 const canvas = $<HTMLCanvasElement>("scene");
 const roomNameEl = $("room-name");
 const viewerCount = $("viewer-count");
-const hint = $("hint");
-const burnBar = $("burn-bar");
 const itemsEl = $("items");
+const burnSheet = $("burn-sheet");
+const statusChip = $("status-chip");
+const statusTitle = $("status-title");
+const statusRight = $("status-right");
+const statusLine = $("status-line");
+const statusSub = $("status-sub");
+const actSeat = $<HTMLButtonElement>("act-seat");
+const actSeatLabel = $("act-seat-label");
+const actBurn = $<HTMLButtonElement>("act-burn");
+let burnedToday = 0;
 const toast = $("toast");
 const loading = $("loading");
 const roomsDialog = $<HTMLDialogElement>("rooms");
@@ -134,6 +142,34 @@ function setRoom(r: RoomInfo) {
   roomNameEl.textContent = r.name;
   viewerCount.textContent = String(r.count);
   document.title = `댕순 — ${r.name} · ${r.count}명이 함께`;
+  renderStatus();
+}
+
+/** 아래 상태 카드: 산티아고 길의 "걷는 중 Day 1" 카드처럼, 지금 내 상황을 한 줄로 */
+function renderStatus() {
+  const seated = self?.seat !== null && self?.seat !== undefined;
+  statusChip.textContent = seated ? "앉아 있음" : "걷는 중";
+  statusChip.classList.toggle("seated", seated);
+  statusTitle.textContent = room?.name ?? "캠프 찾는 중";
+  statusRight.textContent = room ? `${room.count} / ${room.capacity}명` : "";
+  if (seated) {
+    const mySeat = seatById(self!.seat!)!;
+    let around = 0;
+    for (const c of world.chars.values()) {
+      if (c.state.seat === null) continue;
+      if (seatById(c.state.seat)?.brazier === mySeat.brazier) around++;
+    }
+    const fireName = BRAZIERS[mySeat.brazier].size === "large" ? "모닥불" : "내 화로";
+    statusLine.textContent = around > 1 ? `${fireName} 옆에 ${around}명이 같이 앉아 있어요` : `${fireName} 옆에 혼자 앉아 있어요`;
+    statusSub.textContent = `오늘 ${burnedToday}개 태움 · 쓸어서 고개 돌리기 · 태우기로 뭔가 던져 넣기`;
+  } else {
+    statusLine.textContent = room ? `이 캠프에 지금 ${room.count}명이 같이 있어요` : "캠프를 찾는 중이에요";
+    statusSub.textContent = "땅을 누르면 걸어가요 · 쓸어서 둘러보기 · 통나무 옆에서 앉기";
+  }
+  actSeatLabel.textContent = seated ? "일어나기" : "앉기";
+  actSeat.classList.toggle("primary", seated);
+  actBurn.disabled = !seated;
+  if (!seated) burnSheet.hidden = true;
 }
 
 // ---------- 앉기/일어나기 UI ----------
@@ -145,24 +181,49 @@ for (const it of ITEMS) {
   b.addEventListener("click", () => {
     socket.send({ type: "burn", item: it.id });
     lastBurn = performance.now();
+    burnedToday++;
     setItemsDisabled(true);
     window.setTimeout(() => setItemsDisabled(false), 2500);
+    renderStatus();
   });
   itemsEl.appendChild(b);
 }
 function setItemsDisabled(v: boolean) {
   for (const b of itemsEl.querySelectorAll<HTMLButtonElement>("button")) b.disabled = v;
 }
-$("stand").addEventListener("click", () => socket.send({ type: "stand" }));
+
+// ---------- 아이콘 바 ----------
+actSeat.addEventListener("click", () => {
+  if (!self) return;
+  if (self.seat !== null) { socket.send({ type: "stand" }); return; }
+  const seat = world.seatNear(self.x, self.y, 260);
+  if (seat) socket.send({ type: "sit", seat: seat.id });
+  else showToast("통나무 가까이 가서 눌러요");
+});
+actBurn.addEventListener("click", () => {
+  burnSheet.hidden = !burnSheet.hidden;
+  actBurn.classList.toggle("on", !burnSheet.hidden);
+});
+$("act-look").addEventListener("click", () => {
+  // 걸을 땐 카메라를 90도 돌리고, 앉았을 땐 옆 사람 쪽으로 고개를 돌림
+  world.rig.orbit(world.rig.focused ? 200 : -260);
+});
+$("act-camp").addEventListener("click", () => $("room-btn").click());
+$("act-more").addEventListener("click", (e) => {
+  const tools = document.querySelector<HTMLElement>(".tools")!;
+  tools.classList.toggle("open");
+  (e.currentTarget as HTMLElement).classList.toggle("on", tools.classList.contains("open"));
+});
 
 function updateSeatUI() {
   const seated = self?.seat !== null && self?.seat !== undefined;
-  burnBar.hidden = !seated;
-  hint.hidden = seated;
   document.body.classList.toggle("seated", seated);
   if (seated && performance.now() - lastBurn > 2500) setItemsDisabled(false);
   world.rig.focusSeat(seated ? self!.seat! : null);
+  renderStatus();
 }
+// 같은 화로에 누가 앉거나 일어나면 카드 숫자 갱신
+window.setInterval(renderStatus, 2000);
 
 // ---------- 입력: 탭은 "거기로 걸어가", 그루터기 위면 "앉아" ----------
 // 탭 = 걸어가기/앉기, 좌우로 쓸기 = 둘러보기(카메라 회전)
@@ -284,7 +345,7 @@ let idleTimer: number | undefined;
 function wakeHud() {
   $("hud").style.opacity = "1";
   window.clearTimeout(idleTimer);
-  idleTimer = window.setTimeout(() => { if (burnBar.hidden) $("hud").style.opacity = "0.25"; }, 6000);
+  idleTimer = window.setTimeout(() => { $("hud").style.opacity = "0.55"; }, 8000);
 }
 for (const ev of ["pointermove", "pointerdown", "keydown"]) window.addEventListener(ev, wakeHud, { passive: true });
 wakeHud();

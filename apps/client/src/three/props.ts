@@ -92,6 +92,143 @@ export function makeBraziers(): THREE.Group[] {
   return BRAZIERS.map(makeBrazier);
 }
 
+/** 풀잎 텍스처: 캔버스에 잎 몇 가닥을 그려 알파 스프라이트로 */
+let grassTex: THREE.Texture | null = null;
+function grassTexture() {
+  if (grassTex) return grassTex;
+  const c = document.createElement("canvas");
+  c.width = 64; c.height = 64;
+  const g = c.getContext("2d")!;
+  for (let i = 0; i < 7; i++) {
+    const x0 = 8 + i * 8 + (Math.random() - 0.5) * 4;
+    const h = 30 + Math.random() * 30;
+    const lean = (Math.random() - 0.5) * 18;
+    const grd = g.createLinearGradient(0, 64, 0, 64 - h);
+    grd.addColorStop(0, "rgba(255,255,255,1)");
+    grd.addColorStop(1, "rgba(255,255,255,0.95)");
+    g.fillStyle = grd;
+    g.beginPath();
+    g.moveTo(x0 - 2.5, 64);
+    g.quadraticCurveTo(x0 + lean * 0.4, 64 - h * 0.6, x0 + lean, 64 - h);
+    g.quadraticCurveTo(x0 + lean * 0.4 + 1, 64 - h * 0.6, x0 + 2.5, 64);
+    g.closePath();
+    g.fill();
+  }
+  grassTex = new THREE.CanvasTexture(c);
+  return grassTex;
+}
+
+/**
+ * 땅 위 장식: 풀 포기(인스턴스), 덤불, 돌멩이, 화로 옆 돌탑.
+ * InstancedMesh = 같은 모양을 수천 개 그릴 때 한 번의 그리기 명령으로 끝내는 기법(폰에 중요).
+ */
+export function makeGroundDressing(kind: SceneKind): THREE.Group {
+  const g = new THREE.Group();
+  const W = WORLD.w * S, H = WORLD.h * S;
+  const margin = 7;
+  const avoid = (x: number, z: number) => {
+    for (const b of BRAZIERS) if (Math.hypot(b.x * S - x, b.y * S - z) < (b.size === "large" ? 1.5 : 1.0)) return true;
+    for (const st of SEATS) if (Math.hypot(st.x * S - x, st.y * S - z) < 0.5) return true;
+    return false;
+  };
+  const rnd = (a: number, b: number) => a + Math.random() * (b - a);
+
+  // --- 풀 ---
+  const count = kind === "mountain" ? 2200 : 500;
+  const plane = new THREE.PlaneGeometry(0.42, 0.34);
+  plane.translate(0, 0.17, 0);
+  const grassMat = new THREE.MeshStandardMaterial({
+    map: grassTexture(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 1,
+    color: kind === "mountain" ? 0x7fa548 : 0xb9b47a,
+  });
+  const a = new THREE.InstancedMesh(plane, grassMat, count);
+  const b = new THREE.InstancedMesh(plane, grassMat, count);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), pos = new THREE.Vector3(), scl = new THREE.Vector3();
+  const col = new THREE.Color();
+  const palette = kind === "mountain" ? [0x6f9a3c, 0x86ad4a, 0x9bb65a, 0xb7a94a, 0x7f8f3a] : [0xb8b47c, 0xa7a06a, 0xc8c28a];
+  let placed = 0, tries = 0;
+  while (placed < count && tries < count * 4) {
+    tries++;
+    const x = rnd(-margin, W + margin), z = rnd(-margin, H + margin);
+    if (avoid(x, z)) continue;
+    const yaw = Math.random() * Math.PI;
+    const sc = rnd(0.7, 1.5);
+    pos.set(x, 0, z); scl.set(sc, sc * rnd(0.8, 1.3), sc);
+    q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+    a.setMatrixAt(placed, m.compose(pos, q, scl));
+    q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw + Math.PI / 2);
+    b.setMatrixAt(placed, m.compose(pos, q, scl));
+    col.setHex(palette[Math.floor(Math.random() * palette.length)]);
+    a.setColorAt(placed, col); b.setColorAt(placed, col);
+    placed++;
+  }
+  a.count = placed; b.count = placed;
+  g.add(a, b);
+
+  // --- 덤불 ---
+  if (kind === "mountain") {
+    const bushGeo = new THREE.IcosahedronGeometry(1, 1);
+    const bp = bushGeo.attributes.position as THREE.BufferAttribute;
+    for (let i = 0; i < bp.count; i++) {
+      const v = new THREE.Vector3().fromBufferAttribute(bp, i).multiplyScalar(0.85 + Math.random() * 0.3);
+      bp.setXYZ(i, v.x, v.y, v.z);
+    }
+    bushGeo.computeVertexNormals();
+    const bushMats = [0x3f6b2e, 0x4b7a33, 0x5a8a3a].map((c) => new THREE.MeshStandardMaterial({ color: c, roughness: 1 }));
+    for (let i = 0; i < 40; i++) {
+      let x = 0, z = 0, ok = false;
+      for (let t = 0; t < 10 && !ok; t++) { x = rnd(-margin, W + margin); z = rnd(-margin, H + margin); ok = !avoid(x, z) && Math.hypot(x - W / 2, z - H / 2) > 4; }
+      if (!ok) continue;
+      const bush = new THREE.Group();
+      const n = 2 + Math.floor(Math.random() * 3);
+      for (let j = 0; j < n; j++) {
+        const mesh = new THREE.Mesh(bushGeo, bushMats[(i + j) % bushMats.length]);
+        const r = rnd(0.3, 0.6);
+        mesh.position.set(rnd(-0.3, 0.3), r * 0.8, rnd(-0.3, 0.3));
+        mesh.scale.set(r, r * 0.8, r);
+        bush.add(mesh);
+      }
+      bush.position.set(x, 0, z);
+      g.add(bush);
+    }
+  }
+
+  // --- 돌멩이 ---
+  const rockMat = new THREE.MeshStandardMaterial({ color: kind === "sea" ? 0x8a8378 : 0x7d7468, roughness: 0.95 });
+  const rockGeo = new THREE.DodecahedronGeometry(1, 1);
+  for (let i = 0; i < 70; i++) {
+    const x = rnd(-margin, W + margin), z = rnd(-margin, H + margin);
+    if (avoid(x, z)) continue;
+    const r = rnd(0.05, 0.16);
+    const rock = new THREE.Mesh(rockGeo, rockMat);
+    rock.position.set(x, r * 0.5, z);
+    rock.scale.set(r, r * 0.6, r * rnd(0.8, 1.3));
+    rock.rotation.set(Math.random(), Math.random(), Math.random());
+    g.add(rock);
+  }
+
+  // --- 돌탑: 큰 화로 근처에 하나씩 ---
+  const cairnMat = new THREE.MeshStandardMaterial({ color: 0x8d8478, roughness: 0.95 });
+  for (const br of BRAZIERS) {
+    if (br.size !== "large") continue;
+    const ang = Math.random() * Math.PI * 2;
+    const cx = br.x * S + Math.cos(ang) * 2.4, cz = br.y * S + Math.sin(ang) * 2.4;
+    let y = 0;
+    const n = 4 + Math.floor(Math.random() * 3);
+    for (let j = 0; j < n; j++) {
+      const r = 0.22 - j * 0.03;
+      const h = 0.09 + Math.random() * 0.05;
+      const stone = new THREE.Mesh(rockGeo, cairnMat);
+      stone.position.set(cx + rnd(-0.03, 0.03), y + h / 2, cz + rnd(-0.03, 0.03));
+      stone.scale.set(r, h / 2, r * rnd(0.85, 1.15));
+      stone.rotation.y = Math.random() * Math.PI;
+      g.add(stone);
+      y += h * 0.9;
+    }
+  }
+  return g;
+}
+
 /** 캠프 바깥을 둘러싸는 풍경. 산: 나무 띠 + 먼 산. 바다: 북쪽에 바다. */
 export function makeSurroundings(kind: SceneKind): { group: THREE.Group; water: THREE.Mesh | null } {
   const g = new THREE.Group();
@@ -100,7 +237,7 @@ export function makeSurroundings(kind: SceneKind): { group: THREE.Group; water: 
 
   if (kind === "mountain") {
     const trunkMat = new THREE.MeshStandardMaterial({ color: 0x4a3626, roughness: 1 });
-    const leafMats = [0x2f5a33, 0x3a6a3a, 0x29512d, 0x4a6b2e, 0x5a6a2a].map((c) => new THREE.MeshStandardMaterial({ color: c, roughness: 1 }));
+    const leafMats = [0x3f7a3c, 0x4e8a44, 0x5f9a4a, 0x6f9e3e, 0x7fa84a].map((c) => new THREE.MeshStandardMaterial({ color: c, roughness: 1 }));
     const trunkGeo = new THREE.CylinderGeometry(0.12, 0.2, 1.4, 8);
     const coneGeo = new THREE.ConeGeometry(1, 2.2, 9);
     const blobGeo = new THREE.IcosahedronGeometry(1, 1);
@@ -125,7 +262,7 @@ export function makeSurroundings(kind: SceneKind): { group: THREE.Group; water: 
       const trunk = new THREE.Mesh(trunkGeo, trunkMat);
       trunk.position.y = 0.7;
       t.add(trunk);
-      if (i % 3 === 0) {
+      if (i % 4 === 0) {
         // 침엽수
         for (let j = 0; j < 3; j++) {
           const c = new THREE.Mesh(coneGeo, leafMats[(i + j) % leafMats.length]);
