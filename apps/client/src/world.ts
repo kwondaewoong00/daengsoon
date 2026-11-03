@@ -3,7 +3,7 @@ import { BRAZIERS, SEATS, WORLD, itemById, seatById, type ItemId, type PlayerSta
 import { Stage } from "./three/scene";
 import { Fire3D } from "./three/fire";
 import { Character } from "./three/character";
-import { makeBraziers, makeGroundDressing, makeStumps, makeSurroundings, type Stump } from "./three/props";
+import { Motes, makeBraziers, makeGroundDressing, makeStumps, makeSurroundings, windUniform, type Stump } from "./three/props";
 import { CameraRig } from "./three/camera";
 import { BurnFx, halfPaperGeo, paperMaterial } from "./three/fx";
 import { Hands } from "./three/hands";
@@ -21,6 +21,7 @@ export class World {
   private stumps: Stump[];
   private surroundings: THREE.Group | null = null;
   private dressing: THREE.Group | null = null;
+  private motes: Motes | null = null;
   private water: THREE.Mesh | null = null;
   private fx = new BurnFx();
   readonly hands = new Hands();
@@ -72,6 +73,9 @@ export class World {
     if (this.dressing) this.stage.scene.remove(this.dressing);
     this.dressing = makeGroundDressing(k);
     this.stage.scene.add(this.dressing);
+    if (this.motes) this.stage.scene.remove(this.motes.points);
+    this.motes = new Motes(k);
+    this.stage.scene.add(this.motes.points);
     const sur = makeSurroundings(k);
     this.surroundings = sur.group;
     this.water = sur.water;
@@ -217,6 +221,9 @@ export class World {
     for (const f of this.fires) f.update(dt);
     this.fx.update(dt);
     this.hands.update(dt);
+    windUniform.value = this.t;
+    this.motes?.update(this.t);
+    this.stage.tick(this.t);
     if (this.water) ((this.water.material as THREE.ShaderMaterial).uniforms.uTime.value = this.t);
     // 앉은 자리의 그루터기는 캐릭터 밑에 그대로 둠(앉아 있는 모습). 빈 자리만 하이라이트 가능
     this.stage.render(this.rig.camera);

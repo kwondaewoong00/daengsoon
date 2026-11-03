@@ -137,8 +137,9 @@ export class Fire3D {
 
   /** 뭔가 들어왔다: 색 플래시 + 2.5초 솟구침 + 불똥 연타 */
   burn(color: string) {
-    this.flash = 1;
-    this.surge = 1;
+    // 여러 명이 연달아 태워도 누적되지 않게 상한
+    this.flash = Math.min(1, this.flash + 0.7);
+    this.surge = Math.min(1, this.surge + 0.6);
     this.flashColor.set(color);
     this.pop(1);
     this.popQueue = [0.18, 0.4, 0.75];
@@ -188,7 +189,7 @@ export class Fire3D {
       k.pos[i * 3 + 2] = Math.sin(ang) * r;
       const spread = 0.5 + strength * 0.8;
       k.vel[i * 3] = (Math.random() - 0.5) * spread;
-      k.vel[i * 3 + 1] = (1.4 + Math.random() * 1.8) * (0.7 + strength * 0.5) * s;
+      k.vel[i * 3 + 1] = (1.6 + Math.random() * 2.2) * (0.7 + strength * 0.5) * s;
       k.vel[i * 3 + 2] = (Math.random() - 0.5) * spread;
       k.max[i] = 0.7 + Math.random() * 1.3;
       k.life[i] = 0;
@@ -214,7 +215,7 @@ export class Fire3D {
     const gust = 0.75 + 0.2 * Math.sin(t * 0.9) + 0.12 * Math.sin(t * 2.3 + 1.3) + 0.08 * Math.sin(t * 5.1);
     const swayX = Math.sin(t * 1.7) * 0.35 + Math.sin(t * 0.6) * 0.2;
     const swayZ = Math.cos(t * 1.3) * 0.25;
-    const power = gust + this.flash * 0.9 + this.surge * 0.7;
+    const power = gust + this.flash * 0.5 + this.surge * 0.5;
 
     // 1) 불꽃
     const f = this.flames;
@@ -230,14 +231,14 @@ export class Fire3D {
       f.pos[i * 3] += f.vel[i * 3] * dt;
       f.pos[i * 3 + 1] += f.vel[i * 3 + 1] * dt * power * speedUp;
       // 솟구칠 때는 불꽃이 더 크게
-      f.alpha[i] *= 1 + this.surge * 0.25;
+      f.alpha[i] *= 1 + this.surge * 0.12;
       f.pos[i * 3 + 2] += f.vel[i * 3 + 2] * dt;
       // 크기: 태어나서 잠깐 커졌다가 작아짐. 알파: 서서히 사라짐
       const grow = k < 0.25 ? 0.7 + k * 1.2 : 1 - (k - 0.25) * 0.9;
       f.alpha[i] = (1 - k) * 0.85 * grow;
       const flashing = this.flash > 0.05 && k < 0.5;
       if (flashing) {
-        const m = 1.2 + this.flash;
+        const m = 0.9 + this.flash * 0.35;
         f.col[i * 3] = this.flashColor.r * m; f.col[i * 3 + 1] = this.flashColor.g * m; f.col[i * 3 + 2] = this.flashColor.b * m;
       } else {
         f.col[i * 3] = 1.7;
@@ -288,7 +289,7 @@ export class Fire3D {
       m.pos[i * 3 + 1] += m.vel[i * 3 + 1] * dt;
       m.pos[i * 3 + 2] += m.vel[i * 3 + 2] * dt;
       m.size[i] += dt * 0.35 * this.scale;
-      m.alpha[i] = Math.sin(a * Math.PI) * 0.13;
+      m.alpha[i] = Math.sin(a * Math.PI) * 0.18;
       const g = 0.22 + a * 0.1;
       m.col[i * 3] = g; m.col[i * 3 + 1] = g; m.col[i * 3 + 2] = g + 0.02;
     }
@@ -296,8 +297,8 @@ export class Fire3D {
 
     // 빛: 저주파 흔들림 + 고주파 떨림 + 타닥 튐 + 플래시
     const flicker = 0.82 + 0.1 * gust + Math.sin(t * 11) * 0.05 + Math.sin(t * 23.7) * 0.04 + Math.random() * 0.03;
-    this.light.intensity = this.baseIntensity * flicker * (1 + this.flash * 1.4 + this.popKick * 0.5 + this.surge * 0.6);
-    this.light.color.lerpColors(new THREE.Color(0xff9a3c), this.flashColor, this.flash * 0.7);
+    this.light.intensity = this.baseIntensity * flicker * (1 + this.flash * 0.8 + this.popKick * 0.4 + this.surge * 0.35);
+    this.light.color.lerpColors(new THREE.Color(0xff9a3c), this.flashColor, this.flash * 0.45);
     this.light.position.x = swayX * 0.08;
     this.light.position.z = swayZ * 0.08;
     (this.glow.material as THREE.SpriteMaterial).opacity = 0.35 + 0.15 * gust + this.popKick * 0.2;

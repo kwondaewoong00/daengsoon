@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import type { ItemDef } from "@daengsoon/shared";
-import { halfPaperGeo, paperMaterial } from "./fx";
+import { halfPaperGeo, paperMaterial, wholePaperGeo } from "./fx";
 
 /**
  * 1인칭 손. 카메라에 붙어 있어 화면 아래에서 올라옵니다.
@@ -19,6 +19,8 @@ export class Hands {
   private handR = new THREE.Group();
   private paperL: THREE.Mesh | null = null;
   private paperR: THREE.Mesh | null = null;
+  private whole: THREE.Mesh | null = null;
+  private mat: THREE.MeshStandardMaterial | null = null;
   private t = -1;
   private onThrow: ((l: THREE.Mesh, r: THREE.Mesh) => void) | null = null;
   private onTear: (() => void) | null = null;
@@ -37,6 +39,7 @@ export class Hands {
       g.add(hand, thumb, arm);
       this.group.add(g);
     }
+    this.group.scale.setScalar(0.72);
     this.group.visible = false;
   }
 
@@ -44,15 +47,12 @@ export class Hands {
 
   /** 시작. 카메라 로컬 좌표계에서 움직임 */
   start(def: ItemDef, onTear: () => void, onThrow: (l: THREE.Mesh, r: THREE.Mesh) => void) {
-    if (this.paperL) { this.handL.remove(this.paperL); this.handR.remove(this.paperR!); }
-    const mat = paperMaterial(def);
-    this.paperL = new THREE.Mesh(halfPaperGeo("L", 0.15, 0.2), mat);
-    this.paperR = new THREE.Mesh(halfPaperGeo("R", 0.15, 0.2), mat);
-    // 두 손 사이에 한 장처럼 보이게: 각 손이 자기 반쪽을 듦
-    this.paperL.position.set(0.045, 0.07, 0.03);
-    this.paperR.position.set(-0.045, 0.07, 0.03);
-    this.handL.add(this.paperL);
-    this.handR.add(this.paperR);
+    if (this.paperL) { this.handL.remove(this.paperL); this.handR.remove(this.paperR!); this.paperL = this.paperR = null; }
+    if (this.whole) { this.group.remove(this.whole); }
+    this.mat = paperMaterial(def);
+    // 한 장을 두 손 사이(카메라 로컬)에 들고 있음. 찢는 순간 반쪽 둘로 바뀜
+    this.whole = new THREE.Mesh(wholePaperGeo(0.15, 0.2), this.mat);
+    this.group.add(this.whole);
     this.onTear = onTear;
     this.onThrow = onThrow;
     this.tore = false;
@@ -68,7 +68,8 @@ export class Hands {
     let y = -0.45, z = -0.5, spread = 0.05, tilt = 0.2, tear = 0, throwK = 0;
     if (T < 0.45) { const e = ease(T / 0.45); y = -0.45 + 0.25 * e; }                 // 올라옴
     else if (T < 0.8) { y = -0.2; }                                                     // 들고 봄
-    else if (T < 1.3) { const e = ease((T - 0.8) / 0.5); y = -0.2; spread = 0.05 + 0.06 * e; tear = e; if (!this.tore && e > 0.15) { this.tore = true; this.onTear?.(); } }
+    else if (T < 1.3) { const e = ease((T - 0.8) / 0.5); y = -0.2; spread = 0.05 + 0.06 * e; tear = e;
+      if (!this.tore && e > 0.15) { this.tore = true; this.onTear?.(); this.split(); } }
     else if (T < 1.65) { const e = (T - 1.3) / 0.35; y = -0.2 + 0.1 * Math.sin(e * Math.PI); z = -0.5 - 0.25 * e; spread = 0.11; tear = 1; throwK = e;
       if (this.paperL && e > 0.35) { // 손에서 떨어져 나감
         const l = this.paperL, r = this.paperR!; this.paperL = this.paperR = null;
@@ -82,11 +83,30 @@ export class Hands {
     this.handR.position.set(spread, y + bob, z);
     this.handL.rotation.set(tilt, 0.3 + tear * 0.5, 0.2 + throwK * 0.4);
     this.handR.rotation.set(tilt, -0.3 - tear * 0.5, -0.2 - throwK * 0.4);
+    if (this.whole) {
+      // 통째로: 두 손 가운데, 살짝 떨림. 찢기 직전엔 양쪽으로 당겨져 팽팽
+      this.whole.position.set(0, y + 0.07 + bob, z + 0.03);
+      this.whole.rotation.set(tilt * 0.5, 0, Math.sin(T * 9) * 0.02);
+      this.whole.scale.x = 1 + tear * 0.15;
+    }
     if (this.paperL && this.paperR) {
-      // 찢기: 반쪽이 바깥으로 젖혀짐
+      // 찢긴 뒤: 반쪽이 바깥으로 젖혀짐
       this.paperL.rotation.set(0, -tear * 0.9, tear * 0.25);
       this.paperR.rotation.set(0, tear * 0.9, -tear * 0.25);
     }
+  }
+
+  /** 한 장 → 반쪽 둘 (각 손에) */
+  private split() {
+    if (!this.whole || !this.mat) return;
+    this.group.remove(this.whole);
+    this.whole = null;
+    this.paperL = new THREE.Mesh(halfPaperGeo("L", 0.15, 0.2), this.mat);
+    this.paperR = new THREE.Mesh(halfPaperGeo("R", 0.15, 0.2), this.mat);
+    this.paperL.position.set(0.045, 0.07, 0.03);
+    this.paperR.position.set(-0.045, 0.07, 0.03);
+    this.handL.add(this.paperL);
+    this.handR.add(this.paperR);
   }
 }
 function ease(k: number) { return k < 0 ? 0 : k > 1 ? 1 : k * k * (3 - 2 * k); }

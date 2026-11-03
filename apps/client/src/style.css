@@ -16,7 +16,7 @@ html, body {
   overflow: hidden; overscroll-behavior: none;
   -webkit-tap-highlight-color: transparent; user-select: none;
 }
-#scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: crosshair; }
+#scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
 .loading { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: #0a0806; color: var(--muted); font-size: 14px; z-index: 5; transition: opacity 0.8s var(--ease); }
 .loading[hidden] { display: none; }
 .loading.fade { opacity: 0; pointer-events: none; }
@@ -39,7 +39,7 @@ html, body {
 .room-name { font-weight: 700; font-size: 15px; }
 .count { margin-left: 4px; font-size: 14px; }
 .tools { display: inline-flex; gap: 2px; padding: 4px; }
-@media (max-width: 520px) { .tools { display: none; } .tools.open { display: inline-flex; } }
+
 .tools .icon { background: transparent; }
 
 /* 이름표 */

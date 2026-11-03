@@ -39,14 +39,18 @@ export function halfPaperGeo(side: "L" | "R", w = 0.22, h = 0.3) {
   geo.translate(side === "L" ? -w / 4 : w / 4, 0, 0);
   return geo;
 }
+/** 찢기 전 한 장짜리 */
+export function wholePaperGeo(w = 0.22, h = 0.3) {
+  return new THREE.PlaneGeometry(w, h);
+}
 export function paperMaterial(def: ItemDef) {
   return new THREE.MeshStandardMaterial({ map: paperTexture(def), roughness: 0.9, side: THREE.DoubleSide });
 }
 
 interface Flight { mesh: THREE.Object3D; from: THREE.Vector3; to: THREE.Vector3; t: number; dur: number; spin: THREE.Vector3; onHit: () => void; fired: boolean }
 interface Ash { mesh: THREE.Mesh; vel: THREE.Vector3; life: number }
-const ashGeo = new THREE.BoxGeometry(0.03, 0.03, 0.03);
-const ashMat = new THREE.MeshBasicMaterial({ color: 0x8a8078, transparent: true });
+const ashGeo = new THREE.BoxGeometry(0.016, 0.016, 0.016);
+const ashMat = new THREE.MeshBasicMaterial({ color: 0x4a423c, transparent: true });
 
 /** 날아가는 조각들과 재 */
 export class BurnFx {
@@ -72,7 +76,7 @@ export class BurnFx {
       if (k >= 1 && !f.fired) {
         f.fired = true;
         f.onHit();
-        for (let i = 0; i < 16; i++) {
+        for (let i = 0; i < 9; i++) {
           const m = new THREE.Mesh(ashGeo, ashMat.clone());
           m.position.copy(f.to).add(new THREE.Vector3((Math.random() - 0.5) * 0.3, 0, (Math.random() - 0.5) * 0.3));
           this.group.add(m);

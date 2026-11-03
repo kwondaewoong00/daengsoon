@@ -73,6 +73,8 @@ function readProfile() {
 }
 entryForm.addEventListener("submit", (e) => {
   e.preventDefault();
+  // 버튼 클릭은 사용자 동작이라 이 안에서 소리를 켤 수 있음(브라우저 자동재생 제한)
+  void audio.enable().then(() => setSoundIcon(true)).catch(() => {});
   const who = readProfile();
   start(who.kind as SceneKind, who, wantedRoom);
 });
@@ -189,7 +191,7 @@ function renderStatus() {
     statusSub.textContent = `오늘 ${burnedToday}개 태움 · 쓸어서 고개 돌리기 · 태우기로 뭔가 던져 넣기`;
   } else {
     statusLine.textContent = room ? `이 캠프에 지금 ${room.count}명이 같이 있어요` : "캠프를 찾는 중이에요";
-    statusSub.textContent = "땅을 누르면 걸어가요 · 쓸어서 둘러보기 · 통나무 옆에서 앉기";
+    statusSub.textContent = "조이스틱으로 걷기 · 화면 쓸어서 둘러보기 · 통나무 옆에서 앉기";
   }
   if (seated) {
     actMainLabel.textContent = "태우기";
@@ -299,40 +301,16 @@ function updateSeatUI() {
 window.setInterval(renderStatus, 2000);
 
 // ---------- 입력: 탭은 "거기로 걸어가", 그루터기 위면 "앉아" ----------
-// 탭 = 걸어가기/앉기, 좌우로 쓸기 = 둘러보기(카메라 회전)
-let pointerDown: { x: number; y: number; lastX: number; dragging: boolean } | null = null;
-canvas.addEventListener("pointerdown", (e) => { pointerDown = { x: e.clientX, y: e.clientY, lastX: e.clientX, dragging: false }; });
+// 화면 쓸기 = 둘러보기(카메라 회전). 이동은 조이스틱만.
+let pointerDown: { x: number; lastX: number } | null = null;
+canvas.addEventListener("pointerdown", (e) => { pointerDown = { x: e.clientX, lastX: e.clientX }; });
 canvas.addEventListener("pointermove", (e) => {
-  if (pointerDown) {
-    const moved = Math.hypot(e.clientX - pointerDown.x, e.clientY - pointerDown.y);
-    if (moved > 12) pointerDown.dragging = true;
-    if (pointerDown.dragging) world.rig.orbit(e.clientX - pointerDown.lastX);
-    pointerDown.lastX = e.clientX;
-    return;
-  }
-  const w = world.pickGround(e.clientX, e.clientY);
-  const seat = w ? world.seatNear(w.x, w.y) : null;
-  world.setHoverSeat(seat);
-  canvas.classList.toggle("seat-hover", !!seat);
-});
-canvas.addEventListener("pointercancel", () => { pointerDown = null; });
-canvas.addEventListener("pointerup", (e) => {
   if (!pointerDown) return;
-  const wasDrag = pointerDown.dragging;
-  pointerDown = null;
-  if (wasDrag) return;
-  const w = world.pickGround(e.clientX, e.clientY);
-  if (!w) return;
-  const seat = world.seatNear(w.x, w.y, world.rig.focused ? 40 : 55);
-  if (world.rig.focused) {
-    const mine = self?.seat !== null && self?.seat !== undefined ? seatById(self!.seat!) : undefined;
-    if (seat && mine && seat.brazier === mine.brazier) socket.send({ type: "sit", seat: seat.id });
-    return;
-  }
-  if (seat) socket.send({ type: "sit", seat: seat.id });
-  else socket.send({ type: "move", x: w.x, y: w.y });
-  wakeHud();
+  world.rig.orbit(e.clientX - pointerDown.lastX);
+  pointerDown.lastX = e.clientX;
 });
+canvas.addEventListener("pointerup", () => { pointerDown = null; wakeHud(); });
+canvas.addEventListener("pointercancel", () => { pointerDown = null; });
 
 const keys = new Set<string>();
 const KEY_DIR: Record<string, [number, number]> = {
@@ -402,13 +380,15 @@ function showRooms(rooms: RoomInfo[]) {
 }
 
 // ---------- 소리 / 전체화면 / HUD ----------
-$("sound").addEventListener("click", async (e) => {
-  const btn = e.currentTarget as HTMLButtonElement;
-  const on = !audio.enabled;
-  if (on) await audio.enable(); else await audio.disable();
-  btn.setAttribute("aria-pressed", String(on));
+function setSoundIcon(on: boolean) {
+  $("sound").setAttribute("aria-pressed", String(on));
   $("sound-on").hidden = !on;
   $("sound-off").hidden = on;
+}
+$("sound").addEventListener("click", async () => {
+  const on = !audio.enabled;
+  if (on) await audio.enable(); else await audio.disable();
+  setSoundIcon(on);
 });
 $("fullscreen").addEventListener("click", () => {
   if (document.fullscreenElement) void document.exitFullscreen();

@@ -105,6 +105,13 @@ export class Stage {
     this.loadedGround = id;
   }
 
+  /** 배경(하늘)을 아주 천천히 돌려 구름·별이 흐르게. 한 바퀴에 약 40분 */
+  tick(t: number) {
+    this.scene.backgroundRotation.set(0, t * 0.0026, 0);
+    this.scene.environmentRotation.set(0, t * 0.0026, 0);
+    this.moon.intensity = 0.55 + Math.sin(t * 0.11) * 0.05;
+  }
+
   render(camera: THREE.Camera) {
     this.renderer.render(this.scene, camera);
   }

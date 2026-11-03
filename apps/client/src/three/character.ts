@@ -61,6 +61,8 @@ const scarfGeo = new THREE.TorusGeometry(0.2, 0.06, 10, 24);
 const glassRimGeo = new THREE.TorusGeometry(0.058, 0.008, 6, 16);
 const glassBridgeGeo = new THREE.BoxGeometry(0.06, 0.008, 0.008);
 const paperGeo = new THREE.PlaneGeometry(0.16, 0.22);
+const halfGeoL = new THREE.PlaneGeometry(0.08, 0.22).translate(-0.04, 0, 0);
+const halfGeoR = new THREE.PlaneGeometry(0.08, 0.22).translate(0.04, 0, 0);
 
 function hairColor(age: AgeBand, hue: number) {
   if (age >= 60) return new THREE.Color("#e3ded6");
@@ -289,16 +291,21 @@ export class Character {
   playTear() {
     this.tearT = 0;
     if (!this.paperL) {
-      this.paperL = new THREE.Mesh(paperGeo, paperMat);
-      this.paperR = new THREE.Mesh(paperGeo, paperMat);
+      // 한 장(오른손에 붙여 두고 왼손이 잡는 척) → 찢기 단계에서 반쪽으로
+      this.paperL = new THREE.Mesh(halfGeoL, paperMat);
+      this.paperR = new THREE.Mesh(halfGeoR, paperMat);
       this.paperL.position.set(0.02, -0.05, 0.05);
       this.paperR.position.set(-0.02, -0.05, 0.05);
       this.handL.add(this.paperL);
       this.handR.add(this.paperR);
+      this.whole = new THREE.Mesh(paperGeo, paperMat);
+      this.whole.position.set(0, -0.05, 0.05);
+      this.handR.add(this.whole);
     }
-    this.paperL.visible = this.paperR!.visible = true;
-    this.paperL.scale.set(1, 1, 1); this.paperR!.scale.set(1, 1, 1);
+    this.whole!.visible = true;
+    this.paperL.visible = this.paperR!.visible = false;
   }
+  private whole: THREE.Mesh | null = null;
   /** 손 위치(3D) — 찢은 조각이 날아가는 시작점 */
   handWorldPos(side: "L" | "R", target: THREE.Vector3) {
     (side === "L" ? this.handL : this.handR).getWorldPosition(target);
@@ -338,7 +345,8 @@ export class Character {
       const T = this.tearT;
       // 0~0.4 꺼내 들기(양손 앞으로 모음) → 0.4~0.9 찢기(양손 벌림) → 0.9~1.3 던지기(앞으로 휙) → 끝
       if (T < 0.4) { const e = T / 0.4; armLx = armRx = -1.5 * e; armLz = 0.15 - 0.3 * e; armRz = -0.15 + 0.3 * e; }
-      else if (T < 0.9) { const e = (T - 0.4) / 0.5; armLx = armRx = -1.5; armLz = -0.15 - 0.6 * e; armRz = 0.15 + 0.6 * e; }
+      else if (T < 0.9) { const e = (T - 0.4) / 0.5; armLx = armRx = -1.5; armLz = -0.15 - 0.6 * e; armRz = 0.15 + 0.6 * e;
+        if (this.whole && e > 0.2) { this.whole.visible = false; this.paperL!.visible = this.paperR!.visible = true; } }
       else if (T < 1.3) { const e = (T - 0.9) / 0.4; armLx = armRx = -1.5 - 0.6 * Math.sin(e * Math.PI); armLz = -0.75 + 0.9 * e; armRz = 0.75 - 0.9 * e;
         if (this.paperL && T > 1.0) { this.paperL.visible = false; this.paperR!.visible = false; } }
       else { this.tearT = -1; }

@@ -92,6 +92,9 @@ export function makeBraziers(): THREE.Group[] {
   return BRAZIERS.map(makeBrazier);
 }
 
+/** 풀·나뭇잎이 공유하는 바람 시계 */
+export const windUniform = { value: 0 };
+
 /** 풀잎 텍스처: 캔버스에 잎 몇 가닥을 그려 알파 스프라이트로 */
 let grassTex: THREE.Texture | null = null;
 function grassTexture() {
@@ -141,6 +144,21 @@ export function makeGroundDressing(kind: SceneKind): THREE.Group {
     map: grassTexture(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 1,
     color: kind === "mountain" ? 0x7fa548 : 0xb9b47a,
   });
+  // 바람: 꼭짓점 셰이더에서 윗부분(uv.y 큰 쪽)만 좌우로 흔듦. 위치마다 위상이 달라 파도처럼 지나감
+  grassMat.onBeforeCompile = (sh) => {
+    sh.uniforms.uTime = windUniform;
+    sh.vertexShader = sh.vertexShader
+      .replace("#include <common>", "#include <common>\nuniform float uTime;")
+      .replace("#include <begin_vertex>", `#include <begin_vertex>
+        {
+          vec4 wp = instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+          float ph = wp.x * 0.35 + wp.z * 0.25;
+          float sway = sin(uTime * 1.3 + ph) * 0.6 + sin(uTime * 2.9 + ph * 2.1) * 0.25;
+          float k = uv.y * uv.y;
+          transformed.x += sway * 0.06 * k;
+          transformed.z += sin(uTime * 1.1 + ph * 1.7) * 0.03 * k;
+        }`);
+  };
   const a = new THREE.InstancedMesh(plane, grassMat, count);
   const b = new THREE.InstancedMesh(plane, grassMat, count);
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), pos = new THREE.Vector3(), scl = new THREE.Vector3();
@@ -229,6 +247,64 @@ export function makeGroundDressing(kind: SceneKind): THREE.Group {
   return g;
 }
 
+/**
+ * 공중에 떠다니는 빛. 산: 반딧불(초록, 느리게 깜빡). 공통: 불티(주황, 화로 위에서 높이 올라감).
+ * 작은 Points 하나로 처리하고 매 프레임 위치만 갱신합니다.
+ */
+export class Motes {
+  readonly points: THREE.Points;
+  private pos: Float32Array;
+  private seed: Float32Array;
+  private isFirefly: Uint8Array;
+  private n: number;
+  constructor(kind: SceneKind) {
+    this.n = kind === "mountain" ? 160 : 70;
+    this.pos = new Float32Array(this.n * 3);
+    this.seed = new Float32Array(this.n * 4);
+    this.isFirefly = new Uint8Array(this.n);
+    const col = new Float32Array(this.n * 3);
+    const W = WORLD.w * S, H = WORLD.h * S;
+    for (let i = 0; i < this.n; i++) {
+      const firefly = kind === "mountain" && i < 100;
+      this.isFirefly[i] = firefly ? 1 : 0;
+      if (firefly) {
+        this.seed[i * 4] = Math.random() * W; this.seed[i * 4 + 1] = 0.4 + Math.random() * 1.6; this.seed[i * 4 + 2] = Math.random() * H;
+        col[i * 3] = 0.75; col[i * 3 + 1] = 1.0; col[i * 3 + 2] = 0.45;
+      } else {
+        const b = BRAZIERS[i % BRAZIERS.length];
+        this.seed[i * 4] = b.x * S; this.seed[i * 4 + 1] = 1 + Math.random() * 4; this.seed[i * 4 + 2] = b.y * S;
+        col[i * 3] = 1.0; col[i * 3 + 1] = 0.6; col[i * 3 + 2] = 0.25;
+      }
+      this.seed[i * 4 + 3] = Math.random() * 100;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(this.pos, 3));
+    geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
+    const mat = new THREE.PointsMaterial({ size: 0.06, vertexColors: true, transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true });
+    this.points = new THREE.Points(geo, mat);
+    this.points.frustumCulled = false;
+    this.update(0);
+  }
+  update(t: number) {
+    for (let i = 0; i < this.n; i++) {
+      const sx = this.seed[i * 4], sy = this.seed[i * 4 + 1], sz = this.seed[i * 4 + 2], ph = this.seed[i * 4 + 3];
+      if (this.isFirefly[i]) {
+        this.pos[i * 3] = sx + Math.sin(t * 0.25 + ph) * 1.6 + Math.sin(t * 0.9 + ph * 2) * 0.3;
+        this.pos[i * 3 + 1] = sy + Math.sin(t * 0.5 + ph) * 0.35;
+        this.pos[i * 3 + 2] = sz + Math.cos(t * 0.2 + ph) * 1.6;
+      } else {
+        // 불티: 화로 위에서 나선으로 천천히 올라가다 다시 아래에서
+        const life = ((t * 0.18 + ph) % 1);
+        const r = 0.2 + life * 1.4;
+        this.pos[i * 3] = sx + Math.cos(t * 0.8 + ph * 3) * r;
+        this.pos[i * 3 + 1] = 0.8 + life * sy;
+        this.pos[i * 3 + 2] = sz + Math.sin(t * 0.8 + ph * 3) * r;
+      }
+    }
+    (this.points.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
+  }
+}
+
 /** 캠프 바깥을 둘러싸는 풍경. 산: 나무 띠 + 먼 산. 바다: 북쪽에 바다. */
 export function makeSurroundings(kind: SceneKind): { group: THREE.Group; water: THREE.Mesh | null } {
   const g = new THREE.Group();
@@ -237,7 +313,21 @@ export function makeSurroundings(kind: SceneKind): { group: THREE.Group; water: 
 
   if (kind === "mountain") {
     const trunkMat = new THREE.MeshStandardMaterial({ color: 0x4a3626, roughness: 1 });
-    const leafMats = [0x3f7a3c, 0x4e8a44, 0x5f9a4a, 0x6f9e3e, 0x7fa84a].map((c) => new THREE.MeshStandardMaterial({ color: c, roughness: 1 }));
+    const leafMats = [0x3f7a3c, 0x4e8a44, 0x5f9a4a, 0x6f9e3e, 0x7fa84a].map((c) => {
+      const m = new THREE.MeshStandardMaterial({ color: c, roughness: 1 });
+      m.onBeforeCompile = (sh) => {
+        sh.uniforms.uTime = windUniform;
+        sh.vertexShader = sh.vertexShader
+          .replace("#include <common>", "#include <common>\nuniform float uTime;")
+          .replace("#include <begin_vertex>", `#include <begin_vertex>
+            {
+              float ph = position.y * 0.8;
+              transformed.x += sin(uTime * 0.9 + ph) * 0.05 * max(0.0, position.y);
+              transformed.z += cos(uTime * 0.7 + ph) * 0.04 * max(0.0, position.y);
+            }`);
+      };
+      return m;
+    });
     const trunkGeo = new THREE.CylinderGeometry(0.12, 0.2, 1.4, 8);
     const coneGeo = new THREE.ConeGeometry(1, 2.2, 9);
     const blobGeo = new THREE.IcosahedronGeometry(1, 1);
