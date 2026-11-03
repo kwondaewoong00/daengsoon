@@ -76,6 +76,32 @@ button:active { transform: scale(0.96); }
   100% { opacity: 0; transform: translate(-50%, 6px); }
 }
 
+.entry {
+  border: 0; border-radius: 24px; padding: 24px; width: min(92vw, 400px);
+  background: #1a1410; color: var(--fg);
+}
+.entry::backdrop { background: rgba(5, 3, 2, 0.75); backdrop-filter: blur(6px); }
+.entry h2 { margin: 0 0 6px; font-size: 20px; font-weight: 600; }
+.entry .sub { margin: 0 0 18px; font-size: 13px; color: var(--muted); line-height: 1.5; }
+.entry fieldset { border: 0; margin: 0 0 14px; padding: 0; }
+.entry legend { font-size: 12px; color: var(--muted); margin-bottom: 8px; padding: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips label { cursor: pointer; }
+.chips input { position: absolute; opacity: 0; width: 0; height: 0; }
+.chips span {
+  display: inline-flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 10px 14px; min-height: 40px; border-radius: 999px; font-size: 14px;
+  background: rgba(255,255,255,0.06); transition: background 0.2s, box-shadow 0.2s;
+}
+.chips small { font-size: 11px; color: var(--muted); }
+.chips input:checked + span { background: rgba(255, 176, 96, 0.22); box-shadow: inset 0 0 0 1.5px var(--accent); }
+.chips input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.kinds span { border-radius: 16px; padding: 12px 18px; }
+.go {
+  width: 100%; margin-top: 6px; background: var(--accent); color: #1a0f05; font-weight: 700;
+  box-shadow: 0 6px 24px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
 .rooms {
   border: 0; border-radius: 20px; padding: 20px; width: min(92vw, 360px);
   background: #1a1410; color: var(--fg);

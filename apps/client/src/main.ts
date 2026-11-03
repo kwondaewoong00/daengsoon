@@ -1,4 +1,4 @@
-import { ITEMS, BRAZIERS, type PlayerState, type RoomInfo, type ServerMessage, itemById } from "@daengsoon/shared";
+import { ITEMS, BRAZIERS, SCENES, roomKind, roomIdValid, makeRoomId, type PlayerState, type RoomInfo, type SceneKind, type ServerMessage, itemById } from "@daengsoon/shared";
 import { Ambience } from "./audio";
 import { Camera } from "./camera";
 import { RoomSocket } from "./socket";
@@ -18,20 +18,53 @@ const roomList = $("room-list");
 
 const world = new World();
 const camera = new Camera();
+// 자동 테스트용: ?debug 일 때만 카메라를 밖으로 노출
+if (params_debug()) (window as unknown as { __camera?: Camera }).__camera = camera;
+function params_debug() { return new URLSearchParams(location.search).has("debug"); }
 const audio = new Ambience();
 let self: PlayerState | null = null;
 let room: RoomInfo | null = null;
 let lastBurn = 0;
+let socket: RoomSocket;
 
-// ---------- 방 선택: ?room=camp-03 이면 그 방, 아니면 auto ----------
+// ---------- 입장: "당신은 누구신가요?" ----------
+// 매번 묻되, 지난번 선택은 미리 채워 둡니다.
 const params = new URLSearchParams(location.search);
-const wantedRoom = params.get("room") ?? "auto";
-
-const socket = new RoomSocket(wantedRoom, onMessage, (s) => {
-  if (s === "connecting") roomNameEl.textContent = "캠프 찾는 중";
-  if (s === "closed") viewerCount.textContent = "–";
+const wantedRoom = params.get("room") && roomIdValid(params.get("room")!) ? params.get("room")! : "auto";
+const entry = $<HTMLDialogElement>("entry");
+const entryForm = $<HTMLFormElement>("entry-form");
+{
+  let saved: Record<string, string> = {};
+  try { saved = JSON.parse(localStorage.getItem("daengsoon:who") ?? "{}"); } catch { /* 무시 */ }
+  for (const [name, value] of Object.entries(saved)) {
+    const input = entryForm.querySelector<HTMLInputElement>(`input[name="${name}"][value="${value}"]`);
+    if (input) input.checked = true;
+  }
+  // 특정 캠프로 바로 온 경우엔 종류를 고를 필요가 없음
+  if (wantedRoom !== "auto") {
+    $("kind-field").hidden = true;
+    const k = entryForm.querySelector<HTMLInputElement>(`input[name="kind"][value="${roomKind(wantedRoom)}"]`);
+    if (k) k.checked = true;
+  }
+}
+entryForm.addEventListener("submit", () => {
+  const data = new FormData(entryForm);
+  const who = { gender: String(data.get("gender")), age: String(data.get("age")), kind: String(data.get("kind")) };
+  try { localStorage.setItem("daengsoon:who", JSON.stringify(who)); } catch { /* 무시 */ }
+  start(who.kind as SceneKind, who.gender, who.age);
 });
-socket.connect();
+entry.addEventListener("cancel", (e) => e.preventDefault()); // ESC로 못 닫음: 답해야 들어감
+entry.showModal();
+
+function start(kind: SceneKind, gender: string, age: string) {
+  world.kind = kind;
+  audio.setKind(kind);
+  socket = new RoomSocket(wantedRoom, { kind, g: gender, a: age }, onMessage, (s) => {
+    if (s === "connecting") roomNameEl.textContent = "캠프 찾는 중";
+    if (s === "closed") viewerCount.textContent = "–";
+  });
+  socket.connect();
+}
 
 function onMessage(msg: ServerMessage) {
   switch (msg.type) {
@@ -41,6 +74,8 @@ function onMessage(msg: ServerMessage) {
       for (const p of msg.players) world.upsert(p);
       self = world.avatars.get(msg.id)!.state;
       setRoom(msg.room);
+      world.kind = msg.room.kind;
+      audio.setKind(msg.room.kind);
       history.replaceState(null, "", `?room=${msg.room.id}`);
       updateSeatUI();
       break;
@@ -169,25 +204,27 @@ function showRooms(rooms: RoomInfo[]) {
   for (const r of list) {
     const li = document.createElement("li");
     const b = document.createElement("button");
-    b.innerHTML = `<span>${r.name}</span><span>${r.count}/${r.capacity}</span>`;
+    b.innerHTML = `<span>${SCENES[r.kind].emoji} ${r.name}</span><span>${r.count}/${r.capacity}</span>`;
     b.disabled = r.count >= r.capacity;
     b.setAttribute("aria-current", String(r.id === room?.id));
     b.addEventListener("click", () => { location.search = `?room=${r.id}`; });
     li.appendChild(b);
     roomList.appendChild(li);
   }
-  const li = document.createElement("li");
-  const b = document.createElement("button");
-  b.innerHTML = `<span>새 캠프 열기</span><span>+</span>`;
-  b.addEventListener("click", () => {
-    const used = new Set(list.map((r) => r.id));
-    for (let n = 1; n <= 50; n++) {
-      const id = `camp-${String(n).padStart(2, "0")}`;
-      if (!used.has(id)) { location.search = `?room=${id}`; return; }
-    }
-  });
-  li.appendChild(b);
-  roomList.appendChild(li);
+  for (const kind of ["mountain", "sea"] as SceneKind[]) {
+    const li = document.createElement("li");
+    const b = document.createElement("button");
+    b.innerHTML = `<span>${SCENES[kind].emoji} 새 ${SCENES[kind].label} 캠프 열기</span><span>+</span>`;
+    b.addEventListener("click", () => {
+      const used = new Set(list.map((r) => r.id));
+      for (let n = 1; n <= 50; n++) {
+        const id = makeRoomId(kind, n);
+        if (!used.has(id)) { location.search = `?room=${id}`; return; }
+      }
+    });
+    li.appendChild(b);
+    roomList.appendChild(li);
+  }
   roomsDialog.showModal();
 }
 

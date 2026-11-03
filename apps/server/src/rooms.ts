@@ -1,4 +1,4 @@
-import { MAX_ROOMS, ROOM_CAPACITY, roomIdValid, type RoomInfo } from "@daengsoon/shared";
+import { MAX_ROOMS, ROOM_CAPACITY, makeRoomId, roomIdValid, roomKind, type RoomInfo, type SceneKind } from "@daengsoon/shared";
 import { Room } from "./room.js";
 
 /**
@@ -31,15 +31,15 @@ export class RoomManager {
    * 자동 배정: "사람이 가장 많지만 아직 자리 있는 방".
    * 같이 보는 게 핵심이므로 흩어지지 않게 한 방부터 채웁니다.
    */
-  auto(): Room | undefined {
+  auto(kind: SceneKind): Room | undefined {
     let best: Room | undefined;
     for (const r of this.rooms.values()) {
-      if (r.full) continue;
+      if (r.full || roomKind(r.id) !== kind) continue;
       if (!best || r.players.size > best.players.size) best = r;
     }
     if (best) return best;
     for (let n = 1; n <= MAX_ROOMS; n++) {
-      const id = `camp-${String(n).padStart(2, "0")}`;
+      const id = makeRoomId(kind, n);
       if (!this.rooms.has(id)) return this.open(id);
     }
     return undefined;

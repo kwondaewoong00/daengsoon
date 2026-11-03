@@ -6,7 +6,9 @@
 
 // ---------- 월드 ----------
 /** 방의 크기(월드 좌표). 화면 크기와 무관한 "가상의 땅" 단위입니다. */
-export const WORLD = { w: 1400, h: 900 } as const;
+export const WORLD = { w: 1400, h: 1000 } as const;
+/** 이 y 위로는 먼 풍경(하늘·산·바다). 캐릭터는 이 아래 땅에서만 움직입니다. */
+export const HORIZON_Y = 190;
 export const ROOM_CAPACITY = 20;
 export const MAX_ROOMS = 50;
 /** 캐릭터 걷는 속도 (월드 단위/초) */
@@ -55,8 +57,8 @@ function makeBrazier(id: number, x: number, y: number, size: "large" | "small", 
 export const BRAZIERS: readonly Brazier[] = (() => {
   const list: Brazier[] = [];
   let seat = 0;
-  const large: Array<[number, number]> = [[380, 300], [1020, 300], [380, 620], [1020, 620]];
-  const small: Array<[number, number]> = [[700, 160], [130, 460], [1270, 460], [700, 740]];
+  const large: Array<[number, number]> = [[380, 420], [1020, 420], [380, 740], [1020, 740]];
+  const small: Array<[number, number]> = [[700, 290], [130, 580], [1270, 580], [700, 860]];
   large.forEach(([x, y], i) => { list.push(makeBrazier(i, x, y, "large", seat)); seat += 4; });
   small.forEach(([x, y], i) => { list.push(makeBrazier(4 + i, x, y, "small", seat)); seat += 1; });
   return list;
@@ -66,6 +68,25 @@ export const SEATS: readonly Seat[] = BRAZIERS.flatMap((b) => b.seats);
 export function seatById(id: number): Seat | undefined {
   return SEATS[id];
 }
+
+// ---------- 누구신가요 ----------
+export type Gender = "m" | "f";
+export type AgeBand = 10 | 20 | 30 | 40 | 50 | 60;
+export const AGE_BANDS: readonly AgeBand[] = [10, 20, 30, 40, 50, 60];
+export interface Profile { gender: Gender; age: AgeBand }
+export function parseProfile(g: string | null, a: string | null): Profile {
+  const gender: Gender = g === "f" ? "f" : "m";
+  const n = Number(a);
+  const age = (AGE_BANDS as readonly number[]).includes(n) ? (n as AgeBand) : 20;
+  return { gender, age };
+}
+
+// ---------- 캠프 종류 ----------
+export type SceneKind = "mountain" | "sea";
+export const SCENES: Record<SceneKind, { label: string; emoji: string }> = {
+  mountain: { label: "산", emoji: "🏔️" },
+  sea: { label: "바다", emoji: "🌊" },
+};
 
 // ---------- 태울 것들 ----------
 export type ItemId = "report" | "resignation" | "letter" | "receipt" | "exam" | "diary";
@@ -85,6 +106,8 @@ export function itemById(id: string): ItemDef | undefined {
 // ---------- 상태 ----------
 export interface PlayerState {
   id: string;
+  gender: Gender;
+  age: AgeBand;
   x: number;
   y: number;
   /** 0~360. 캐릭터 색 */
@@ -99,6 +122,7 @@ export interface PlayerState {
 
 export interface RoomInfo {
   id: string;
+  kind: SceneKind;
   name: string;
   count: number;
   capacity: number;
@@ -125,9 +149,20 @@ export type ServerMessage =
   | { type: "full"; rooms: RoomInfo[] }
   | { type: "pong" };
 
+/** 방 id = 종류-번호. 예: mountain-01, sea-03 */
 export function roomIdValid(id: string): boolean {
-  return /^camp-\d{2}$/.test(id) && Number(id.slice(5)) >= 1 && Number(id.slice(5)) <= MAX_ROOMS;
+  const m = /^(mountain|sea)-(\d{2})$/.exec(id);
+  return !!m && Number(m[2]) >= 1 && Number(m[2]) <= MAX_ROOMS;
+}
+export function roomKind(id: string): SceneKind {
+  return id.startsWith("sea-") ? "sea" : "mountain";
+}
+export function roomNumber(id: string): number {
+  return Number(id.slice(id.indexOf("-") + 1));
 }
 export function roomName(id: string): string {
-  return `${Number(id.slice(5))}번 캠프`;
+  return `${SCENES[roomKind(id)].label} ${roomNumber(id)}번 캠프`;
+}
+export function makeRoomId(kind: SceneKind, n: number): string {
+  return `${kind}-${String(n).padStart(2, "0")}`;
 }

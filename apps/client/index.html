@@ -35,6 +35,43 @@
 
     <div id="toast" class="toast" hidden></div>
 
+    <dialog id="entry" class="entry">
+      <form method="dialog" id="entry-form">
+        <h2>당신은 누구신가요?</h2>
+        <p class="sub">말은 안 해도 돼요. 불 옆에 앉을 사람이 누군지만 알려주세요.</p>
+
+        <fieldset>
+          <legend>성별</legend>
+          <div class="chips" id="gender-chips">
+            <label><input type="radio" name="gender" value="m" checked /><span>남자</span></label>
+            <label><input type="radio" name="gender" value="f" /><span>여자</span></label>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>나이</legend>
+          <div class="chips" id="age-chips">
+            <label><input type="radio" name="age" value="10" /><span>10대</span></label>
+            <label><input type="radio" name="age" value="20" checked /><span>20대</span></label>
+            <label><input type="radio" name="age" value="30" /><span>30대</span></label>
+            <label><input type="radio" name="age" value="40" /><span>40대</span></label>
+            <label><input type="radio" name="age" value="50" /><span>50대</span></label>
+            <label><input type="radio" name="age" value="60" /><span>60대</span></label>
+          </div>
+        </fieldset>
+
+        <fieldset id="kind-field">
+          <legend>어디로 갈까요</legend>
+          <div class="chips kinds">
+            <label><input type="radio" name="kind" value="mountain" checked /><span>🏔️ 산<small>귀뚜라미 소리</small></span></label>
+            <label><input type="radio" name="kind" value="sea" /><span>🌊 바다<small>파도 소리</small></span></label>
+          </div>
+        </fieldset>
+
+        <button type="submit" class="go">불 옆에 앉으러 가기</button>
+      </form>
+    </dialog>
+
     <dialog id="rooms" class="rooms">
       <h2>캠프 고르기</h2>
       <ul id="room-list"></ul>

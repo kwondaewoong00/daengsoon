@@ -2,11 +2,16 @@
  * 소리를 파일 없이 합성합니다. 저작권 걱정이 없고, 가까운 화로에 따라 소리가 살아 움직입니다.
  * Web Audio API = 브라우저 안의 믹싱 콘솔. 노이즈 → 필터 → 볼륨 → 스피커로 선을 연결합니다.
  */
+import type { SceneKind } from "@daengsoon/shared";
+
 export class Ambience {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
   private fireGain: GainNode | null = null;
+  private cricketGain: GainNode | null = null;
+  private waveGain: GainNode | null = null;
   private nearness = 0.3;
+  private kind: SceneKind = "mountain";
   enabled = false;
 
   /** 브라우저는 사용자가 클릭하기 전엔 소리를 못 냅니다(자동재생 차단). 그래서 버튼에서 호출합니다. */
@@ -14,6 +19,16 @@ export class Ambience {
     if (!this.ctx) this.build();
     await this.ctx!.resume();
     this.enabled = true;
+    this.setKind(this.kind);
+  }
+
+  /** 산이면 귀뚜라미, 바다면 파도. 둘 다 불소리보다 작게 깔립니다. */
+  setKind(kind: SceneKind) {
+    this.kind = kind;
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.cricketGain?.gain.setTargetAtTime(kind === "mountain" ? 0.16 : 0, t, 1.2);
+    this.waveGain?.gain.setTargetAtTime(kind === "sea" ? 0.22 : 0, t, 1.2);
   }
   async disable() {
     this.enabled = false;
@@ -56,6 +71,57 @@ export class Ambience {
       window.setTimeout(schedule, 120 + Math.random() * (700 - this.nearness * 450));
     };
     schedule();
+
+    // --- 귀뚜라미: 높은 음(약 4.2kHz)을 초당 ~30번 끊어서 "찌르르" ---
+    const cricketGain = ctx.createGain();
+    cricketGain.gain.value = 0;
+    cricketGain.connect(master);
+    this.cricketGain = cricketGain;
+    for (let i = 0; i < 3; i++) {
+      const osc = ctx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.value = 3900 + i * 260;
+      const chirp = ctx.createGain(); // 빠른 떨림
+      chirp.gain.value = 0;
+      const trem = ctx.createOscillator();
+      trem.type = "square";
+      trem.frequency.value = 26 + i * 5;
+      const tremDepth = ctx.createGain();
+      tremDepth.gain.value = 0.5;
+      trem.connect(tremDepth).connect(chirp.gain);
+      const song = ctx.createGain(); // 몇 초 울고 쉬는 호흡
+      song.gain.value = 0;
+      osc.connect(chirp).connect(song).connect(cricketGain);
+      osc.start(); trem.start();
+      const breathe = () => {
+        const t0 = ctx.currentTime;
+        song.gain.setTargetAtTime(0.35, t0, 0.3);
+        song.gain.setTargetAtTime(0, t0 + 1.5 + Math.random() * 2.5, 0.4);
+        window.setTimeout(breathe, 3000 + Math.random() * 5000);
+      };
+      window.setTimeout(breathe, i * 1200);
+    }
+
+    // --- 파도: 노이즈를 저역 필터로 누르고, 아주 느린 진동으로 밀려왔다 빠지게 ---
+    const waveFilter = ctx.createBiquadFilter();
+    waveFilter.type = "lowpass";
+    waveFilter.frequency.value = 900;
+    const waveSwell = ctx.createGain();
+    waveSwell.gain.value = 0.3;
+    const lfo = ctx.createOscillator();
+    lfo.type = "sine";
+    lfo.frequency.value = 0.11; // 약 9초에 한 번
+    const lfoDepth = ctx.createGain();
+    lfoDepth.gain.value = 0.25;
+    lfo.connect(lfoDepth).connect(waveSwell.gain);
+    const lfoF = ctx.createGain(); // 밀려올 때 소리가 밝아짐
+    lfoF.gain.value = 500;
+    lfo.connect(lfoF).connect(waveFilter.frequency);
+    lfo.start();
+    const waveGain = ctx.createGain();
+    waveGain.gain.value = 0;
+    noise.connect(waveFilter).connect(waveSwell).connect(waveGain).connect(master);
+    this.waveGain = waveGain;
   }
 
   private crackle(at: number, vol: number) {

@@ -1,4 +1,4 @@
-import { BRAZIERS, SEATS, WORLD, itemById, seatById, type ItemId, type PlayerState, type Seat } from "@daengsoon/shared";
+import { BRAZIERS, HORIZON_Y, SEATS, WORLD, itemById, seatById, type ItemId, type PlayerState, type SceneKind, type Seat } from "@daengsoon/shared";
 import { FirePit } from "./fire";
 
 /** 화면에 그리기 위한 캐릭터. 서버 좌표(target)를 부드럽게 따라갑니다(lerp). */
@@ -31,7 +31,14 @@ export class World {
   private burns: BurnFx[] = [];
   private ashes: Ash[] = [];
   private groundCache: HTMLCanvasElement | null = null;
+  private _kind: SceneKind = "mountain";
   selfId = "";
+
+  get kind() { return this._kind; }
+  set kind(k: SceneKind) {
+    if (k !== this._kind) this.groundCache = null;
+    this._kind = k;
+  }
   hoverSeat: Seat | null = null;
 
   // ---------- 상태 반영 ----------
@@ -106,6 +113,7 @@ export class World {
 
   draw(ctx: CanvasRenderingContext2D, t: number) {
     this.drawGround(ctx);
+    this.drawHorizonLive(ctx, t);
     for (const pit of this.pits) pit.drawGlow(ctx);
     this.drawSeats(ctx);
     for (const b of BRAZIERS) this.drawBrazierBody(ctx, b.x, b.y, b.size);
@@ -124,29 +132,141 @@ export class World {
   }
 
   // ---------- 그리기 세부 ----------
+  /** 한 번만 그려두는 배경: 저녁 하늘 + 먼 풍경(산 또는 바다 수평선) + 땅 */
   private drawGround(ctx: CanvasRenderingContext2D) {
     if (!this.groundCache) {
       const c = document.createElement("canvas");
       c.width = WORLD.w; c.height = WORLD.h;
       const g = c.getContext("2d")!;
-      g.fillStyle = "#17110c";
-      g.fillRect(0, 0, WORLD.w, WORLD.h);
-      // 흙 질감: 작은 점들
-      for (let i = 0; i < 6000; i++) {
-        const x = Math.random() * WORLD.w, y = Math.random() * WORLD.h;
-        g.fillStyle = `rgba(${40 + Math.random() * 30}, ${28 + Math.random() * 18}, ${16 + Math.random() * 10}, ${0.25 + Math.random() * 0.4})`;
-        g.fillRect(x, y, 1 + Math.random() * 2, 1 + Math.random() * 2);
+      const sea = this._kind === "sea";
+
+      // 저녁 하늘: 위는 남색, 수평선 근처는 주황
+      const sky = g.createLinearGradient(0, 0, 0, HORIZON_Y);
+      sky.addColorStop(0, sea ? "#0b1530" : "#0d1226");
+      sky.addColorStop(0.55, sea ? "#2a2a52" : "#2b2446");
+      sky.addColorStop(1, sea ? "#c9683a" : "#b8562e");
+      g.fillStyle = sky;
+      g.fillRect(0, 0, WORLD.w, HORIZON_Y);
+      // 별
+      for (let i = 0; i < 140; i++) {
+        const x = Math.random() * WORLD.w, y = Math.random() * HORIZON_Y * 0.6;
+        g.fillStyle = `rgba(255, 245, 230, ${0.3 + Math.random() * 0.6})`;
+        g.fillRect(x, y, 1 + Math.random(), 1 + Math.random());
       }
-      // 풀 몇 포기
-      g.strokeStyle = "rgba(60, 80, 35, 0.35)";
-      g.lineWidth = 1.2;
-      for (let i = 0; i < 400; i++) {
-        const x = Math.random() * WORLD.w, y = Math.random() * WORLD.h;
-        g.beginPath(); g.moveTo(x, y); g.lineTo(x + (Math.random() - 0.5) * 6, y - 5 - Math.random() * 6); g.stroke();
+      // 해 지는 빛
+      const sun = g.createRadialGradient(WORLD.w * 0.62, HORIZON_Y - 6, 0, WORLD.w * 0.62, HORIZON_Y - 6, 260);
+      sun.addColorStop(0, "rgba(255, 190, 110, 0.55)");
+      sun.addColorStop(1, "rgba(255, 150, 80, 0)");
+      g.fillStyle = sun;
+      g.fillRect(0, 0, WORLD.w, HORIZON_Y);
+
+      if (sea) {
+        // 바다 띠 (수평선 아래 ~ HORIZON_Y). 물결은 매 프레임 따로 그림
+        const seaTop = HORIZON_Y - 70;
+        const water = g.createLinearGradient(0, seaTop, 0, HORIZON_Y);
+        water.addColorStop(0, "#3a3c6a");
+        water.addColorStop(1, "#14283a");
+        g.fillStyle = water;
+        g.fillRect(0, seaTop, WORLD.w, HORIZON_Y - seaTop);
+        // 모래
+        g.fillStyle = "#3b3226";
+        g.fillRect(0, HORIZON_Y, WORLD.w, WORLD.h - HORIZON_Y);
+        for (let i = 0; i < 7000; i++) {
+          const x = Math.random() * WORLD.w, y = HORIZON_Y + Math.random() * (WORLD.h - HORIZON_Y);
+          g.fillStyle = `rgba(${90 + Math.random() * 50}, ${75 + Math.random() * 40}, ${50 + Math.random() * 25}, ${0.2 + Math.random() * 0.35})`;
+          g.fillRect(x, y, 1 + Math.random() * 2, 1 + Math.random() * 2);
+        }
+        // 젖은 모래 경계
+        const wet = g.createLinearGradient(0, HORIZON_Y, 0, HORIZON_Y + 50);
+        wet.addColorStop(0, "rgba(120, 140, 160, 0.35)");
+        wet.addColorStop(1, "rgba(120, 140, 160, 0)");
+        g.fillStyle = wet;
+        g.fillRect(0, HORIZON_Y, WORLD.w, 50);
+      } else {
+        // 산 실루엣 3겹 (멀수록 밝고 흐림)
+        const layers = [
+          { y: HORIZON_Y - 95, amp: 55, color: "#3a2f4a", seed: 1 },
+          { y: HORIZON_Y - 60, amp: 45, color: "#26203a", seed: 2 },
+          { y: HORIZON_Y - 25, amp: 30, color: "#171422", seed: 3 },
+        ];
+        for (const L of layers) {
+          g.fillStyle = L.color;
+          g.beginPath();
+          g.moveTo(0, HORIZON_Y);
+          for (let x = 0; x <= WORLD.w; x += 10) {
+            const y = L.y
+              + Math.sin(x * 0.006 * L.seed + L.seed) * L.amp
+              + Math.sin(x * 0.017 + L.seed * 3) * L.amp * 0.35
+              + Math.sin(x * 0.05 + L.seed) * 4;
+            g.lineTo(x, y);
+          }
+          g.lineTo(WORLD.w, HORIZON_Y);
+          g.closePath();
+          g.fill();
+        }
+        // 흙 + 풀
+        g.fillStyle = "#17110c";
+        g.fillRect(0, HORIZON_Y, WORLD.w, WORLD.h - HORIZON_Y);
+        for (let i = 0; i < 6000; i++) {
+          const x = Math.random() * WORLD.w, y = HORIZON_Y + Math.random() * (WORLD.h - HORIZON_Y);
+          g.fillStyle = `rgba(${40 + Math.random() * 30}, ${28 + Math.random() * 18}, ${16 + Math.random() * 10}, ${0.25 + Math.random() * 0.4})`;
+          g.fillRect(x, y, 1 + Math.random() * 2, 1 + Math.random() * 2);
+        }
+        g.strokeStyle = "rgba(60, 80, 35, 0.35)";
+        g.lineWidth = 1.2;
+        for (let i = 0; i < 500; i++) {
+          const x = Math.random() * WORLD.w, y = HORIZON_Y + Math.random() * (WORLD.h - HORIZON_Y);
+          g.beginPath(); g.moveTo(x, y); g.lineTo(x + (Math.random() - 0.5) * 6, y - 5 - Math.random() * 6); g.stroke();
+        }
+        // 숲 가장자리 나무들
+        for (let i = 0; i < 60; i++) {
+          const x = (i / 60) * WORLD.w + (Math.random() - 0.5) * 20;
+          const h = 28 + Math.random() * 30;
+          g.fillStyle = `rgba(${10 + Math.random() * 8}, ${18 + Math.random() * 10}, ${12 + Math.random() * 6}, 0.95)`;
+          g.beginPath(); g.moveTo(x - 10, HORIZON_Y + 4); g.lineTo(x, HORIZON_Y + 4 - h); g.lineTo(x + 10, HORIZON_Y + 4); g.closePath(); g.fill();
+        }
       }
       this.groundCache = c;
     }
     ctx.drawImage(this.groundCache, 0, 0);
+  }
+
+  /** 매 프레임 움직이는 먼 풍경: 바다 물결, 산 반딧불 */
+  private drawHorizonLive(ctx: CanvasRenderingContext2D, t: number) {
+    if (this._kind === "sea") {
+      const seaTop = HORIZON_Y - 70;
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 9; i++) {
+        const k = i / 8;
+        const y0 = seaTop + 8 + k * k * 58;
+        ctx.strokeStyle = `rgba(200, 220, 240, ${0.05 + k * 0.12})`;
+        ctx.beginPath();
+        for (let x = 0; x <= WORLD.w; x += 12) {
+          const y = y0 + Math.sin(x * 0.02 + t * (0.6 + k) + i) * (1 + k * 3) + Math.sin(x * 0.007 - t * 0.4) * 2;
+          if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      }
+      // 밀려오는 거품 선
+      const foamY = HORIZON_Y - 2 + Math.sin(t * 0.5) * 5;
+      ctx.strokeStyle = `rgba(230, 240, 250, ${0.25 + Math.sin(t * 0.5) * 0.1})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (let x = 0; x <= WORLD.w; x += 10) {
+        const y = foamY + Math.sin(x * 0.03 + t) * 3;
+        if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    } else {
+      // 반딧불 몇 마리
+      for (let i = 0; i < 14; i++) {
+        const x = (i * 97) % WORLD.w + Math.sin(t * 0.3 + i) * 30;
+        const y = HORIZON_Y - 30 + Math.sin(t * 0.7 + i * 2) * 25;
+        const a = (Math.sin(t * 1.3 + i * 1.7) + 1) / 2;
+        ctx.fillStyle = `rgba(200, 255, 120, ${a * 0.7})`;
+        ctx.beginPath(); ctx.arc(x, y, 1.5, 0, Math.PI * 2); ctx.fill();
+      }
+    }
   }
 
   private drawSeats(ctx: CanvasRenderingContext2D) {
@@ -206,15 +326,20 @@ export class World {
   }
 
   private drawAvatar(ctx: CanvasRenderingContext2D, a: Avatar, t: number) {
-    const seated = a.state.seat !== null;
-    const self = a.state.id === this.selfId;
-    const hue = a.state.hue;
-    const bob = a.state.moving ? Math.abs(Math.sin(a.step)) * 3 : Math.sin(t * 1.5 + hue) * 0.8;
-    const h = seated ? 30 : 40; // 앉으면 낮아짐
+    const st = a.state;
+    const seated = st.seat !== null;
+    const self = st.id === this.selfId;
+    const hue = st.hue;
+    const bob = st.moving ? Math.abs(Math.sin(a.step)) * 3 : Math.sin(t * 1.5 + hue) * 0.8;
+    // 나이: 10대는 조금 작고, 60대는 살짝 구부정
+    const ageK = (st.age - 10) / 50; // 0~1
+    const scale = st.age === 10 ? 0.88 : 1;
+    const stoop = st.age >= 50 ? 2 : 0;
+    const h = (seated ? 30 : 40) * scale;
+    const hair = hairColor(st.age, hue);
 
     ctx.save();
     ctx.translate(a.x, a.y);
-    // 그림자
     ctx.fillStyle = "rgba(0,0,0,0.35)";
     ctx.beginPath(); ctx.ellipse(0, 2, 12, 5, 0, 0, Math.PI * 2); ctx.fill();
     if (self) {
@@ -222,22 +347,52 @@ export class World {
       ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.ellipse(0, 2, 17, 8, 0, 0, Math.PI * 2); ctx.stroke();
     }
-    // 몸
+    // 몸 (여성은 아래가 살짝 퍼진 실루엣)
     const body = ctx.createLinearGradient(0, -h, 0, 0);
     body.addColorStop(0, `hsl(${hue}, 45%, 58%)`);
     body.addColorStop(1, `hsl(${hue}, 45%, 30%)`);
     ctx.fillStyle = body;
     ctx.beginPath();
-    ctx.roundRect(-10, -h + 10 - bob, 20, h - 10, 8);
+    if (st.gender === "f") {
+      ctx.moveTo(-9, -h + 10 - bob);
+      ctx.lineTo(9, -h + 10 - bob);
+      ctx.lineTo(12, 0);
+      ctx.lineTo(-12, 0);
+      ctx.closePath();
+    } else {
+      ctx.roundRect(-10, -h + 10 - bob, 20, h - 10, 6);
+    }
     ctx.fill();
     // 머리
+    const hy = -h - bob + 2 + stoop;
     ctx.fillStyle = `hsl(${hue}, 30%, 78%)`;
-    ctx.beginPath(); ctx.arc(0, -h - bob + 2, 9, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(0, hy, 9 * scale, 0, Math.PI * 2); ctx.fill();
+    // 머리카락: 여성은 길게, 남성은 짧게. 색은 나이대별
+    ctx.fillStyle = hair;
+    ctx.beginPath();
+    if (st.gender === "f") {
+      ctx.arc(0, hy - 1, 9.5 * scale, Math.PI, 0);
+      ctx.lineTo(9.5 * scale, hy + 10);
+      ctx.lineTo(-9.5 * scale, hy + 10);
+      ctx.closePath();
+      ctx.fill();
+      // 얼굴을 다시 덮어 앞머리 아래 얼굴이 보이게
+      ctx.fillStyle = `hsl(${hue}, 30%, 78%)`;
+      ctx.beginPath(); ctx.arc(0, hy + 1, 7.5 * scale, 0, Math.PI * 2); ctx.fill();
+    } else {
+      ctx.arc(0, hy - 1, 9.3 * scale, Math.PI * 1.05, Math.PI * 1.95);
+      ctx.closePath();
+      ctx.fill();
+    }
     // 바라보는 방향(코)
     const fx = Math.cos(a.facing), fy = Math.sin(a.facing);
     ctx.fillStyle = `hsl(${hue}, 30%, 62%)`;
-    ctx.beginPath(); ctx.arc(fx * 6, -h - bob + 2 + fy * 3, 2.5, 0, Math.PI * 2); ctx.fill();
-    // 불빛 받는 쪽 하이라이트 (가까운 화로 방향)
+    ctx.beginPath(); ctx.arc(fx * 6 * scale, hy + 1 + fy * 3, 2.3, 0, Math.PI * 2); ctx.fill();
+    // 40대 이상: 어깨에 담요/숄 느낌의 띠
+    if (ageK >= 0.6) {
+      ctx.fillStyle = `hsla(${(hue + 40) % 360}, 35%, 40%, 0.9)`;
+      ctx.fillRect(-10, -h + 10 - bob, 20, 5);
+    }
     ctx.restore();
   }
 
@@ -289,6 +444,15 @@ export class World {
     }
     return best;
   }
+}
+
+function hairColor(age: number, hue: number) {
+  if (age >= 60) return "#cfcac2";
+  if (age >= 50) return "#8a8078";
+  if (age >= 40) return "#3a2a22";
+  if (age >= 30) return "#2a1c16";
+  if (age >= 20) return `hsl(${(hue + 180) % 360}, 25%, 22%)`;
+  return `hsl(${(hue + 180) % 360}, 45%, 35%)`; // 10대: 염색한 듯한 색
 }
 
 function angleDiff(from: number, to: number) {

@@ -4,8 +4,11 @@ import {
   SEAT_SNAP,
   WALK_SPEED,
   WORLD,
+  HORIZON_Y,
   itemById,
+  roomKind,
   roomName,
+  type Profile,
   seatById,
   type ClientMessage,
   type PlayerState,
@@ -42,7 +45,7 @@ export class Room {
   constructor(readonly id: string) {}
 
   info(): RoomInfo {
-    return { id: this.id, name: roomName(this.id), count: this.players.size, capacity: ROOM_CAPACITY };
+    return { id: this.id, kind: roomKind(this.id), name: roomName(this.id), count: this.players.size, capacity: ROOM_CAPACITY };
   }
 
   get full() {
@@ -56,10 +59,12 @@ export class Room {
     return undefined;
   }
 
-  join(client: Client): PlayerState {
+  join(client: Client, profile: Profile): PlayerState {
     // 입구(아래쪽 가운데)에 살짝 흩어져서 등장
     const state: PlayerState = {
       id: client.id,
+      gender: profile.gender,
+      age: profile.age,
       x: WORLD.w / 2 + (Math.random() - 0.5) * 160,
       y: WORLD.h - 60 - Math.random() * 40,
       hue: Math.floor(Math.random() * 360),
@@ -94,7 +99,7 @@ export class Room {
     switch (msg.type) {
       case "move": {
         if (!Number.isFinite(msg.x) || !Number.isFinite(msg.y)) return;
-        p.target = { x: clamp(msg.x, 20, WORLD.w - 20), y: clamp(msg.y, 20, WORLD.h - 20) };
+        p.target = { x: clamp(msg.x, 20, WORLD.w - 20), y: clamp(msg.y, HORIZON_Y + 20, WORLD.h - 20) };
         p.reservedSeat = null;
         if (p.state.seat !== null) {
           p.state.seat = null;
@@ -127,7 +132,7 @@ export class Room {
         if (seat) {
           p.target = {
             x: clamp(seat.x - Math.cos(seat.facing) * 40, 20, WORLD.w - 20),
-            y: clamp(seat.y - Math.sin(seat.facing) * 40, 20, WORLD.h - 20),
+            y: clamp(seat.y - Math.sin(seat.facing) * 40, HORIZON_Y + 20, WORLD.h - 20),
           };
         }
         this.dirty.add(id);

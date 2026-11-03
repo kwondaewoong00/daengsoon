@@ -12,6 +12,7 @@ export class RoomSocket {
 
   constructor(
     private roomId: string,
+    private query: Record<string, string>,
     private onMessage: (msg: ServerMessage) => void,
     private onStatus: (s: "connecting" | "open" | "closed") => void,
   ) {}
@@ -20,7 +21,8 @@ export class RoomSocket {
     this.closedByUs = false;
     this.onStatus("connecting");
     const proto = location.protocol === "https:" ? "wss" : "ws";
-    const ws = new WebSocket(`${proto}://${location.host}/ws?room=${encodeURIComponent(this.roomId)}`);
+    const q = new URLSearchParams({ room: this.roomId, ...this.query });
+    const ws = new WebSocket(`${proto}://${location.host}/ws?${q}`);
     this.ws = ws;
 
     ws.onopen = () => {

@@ -3,7 +3,7 @@ import { readFile, stat } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
-import type { ClientMessage, ServerMessage } from "@daengsoon/shared";
+import { parseProfile, type ClientMessage, type ServerMessage } from "@daengsoon/shared";
 import { RoomManager } from "./rooms.js";
 import type { Room } from "./room.js";
 
@@ -72,7 +72,9 @@ const meta = new Map<WebSocket, { id: string; room: Room; lastSeen: number }>();
 wss.on("connection", (ws, req) => {
   const url = new URL(req.url ?? "/", "http://localhost");
   const wanted = url.searchParams.get("room") ?? "auto";
-  const room = wanted === "auto" ? rooms.auto() : rooms.open(wanted);
+  const kind = url.searchParams.get("kind") === "sea" ? "sea" : "mountain";
+  const profile = parseProfile(url.searchParams.get("g"), url.searchParams.get("a"));
+  const room = wanted === "auto" ? rooms.auto(kind) : rooms.open(wanted);
 
   const send = (msg: ServerMessage) => {
     if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
@@ -86,7 +88,7 @@ wss.on("connection", (ws, req) => {
 
   const id = Math.random().toString(36).slice(2, 9);
   meta.set(ws, { id, room, lastSeen: Date.now() });
-  room.join({ id, send });
+  room.join({ id, send }, profile);
 
   ws.on("message", (raw) => {
     const m = meta.get(ws);
