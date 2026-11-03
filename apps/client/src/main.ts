@@ -1,4 +1,4 @@
-import { ITEMS, BRAZIERS, SCENES, roomKind, roomIdValid, makeRoomId, type PlayerState, type RoomInfo, type SceneKind, type ServerMessage, itemById } from "@daengsoon/shared";
+import { ITEMS, BRAZIERS, SCENES, roomKind, roomIdValid, makeRoomId, seatById, type PlayerState, type RoomInfo, type SceneKind, type ServerMessage, itemById } from "@daengsoon/shared";
 import { Ambience } from "./audio";
 import { Camera } from "./camera";
 import { RoomSocket } from "./socket";
@@ -142,7 +142,16 @@ function updateSeatUI() {
   const seated = self?.seat !== null && self?.seat !== undefined;
   burnBar.hidden = !seated;
   hint.hidden = seated;
+  document.body.classList.toggle("seated", seated);
   if (seated && performance.now() - lastBurn > 2500) setItemsDisabled(false);
+  // 앉으면 그 화로로 카메라가 들어감. 일어나면 다시 넓게.
+  const seat = seated ? seatById(self!.seat!) : undefined;
+  if (seat) {
+    const b = BRAZIERS[seat.brazier];
+    camera.focusOn(b.x, b.y, b.size === "large" ? 240 : 180);
+  } else {
+    camera.clearFocus();
+  }
 }
 
 // ---------- 입력: 클릭/탭은 "거기로 걸어가", 통나무 위면 "앉아" ----------
@@ -161,7 +170,13 @@ canvas.addEventListener("pointerup", (e) => {
   pointerDown = null;
   if (moved > 12) return; // 드래그는 무시
   const w = camera.toWorld(e.clientX, e.clientY);
-  const seat = world.seatNear(w.x, w.y);
+  const seat = world.seatNear(w.x, w.y, camera.focused ? 36 : 48);
+  if (camera.focused) {
+    // 앉아 있을 땐 같은 화로의 다른 빈자리로 옮기는 것만 허용. 나머지 탭은 무시(실수로 일어나지 않게)
+    const mine = self?.seat !== null && self?.seat !== undefined ? seatById(self!.seat!) : undefined;
+    if (seat && mine && seat.brazier === mine.brazier) socket.send({ type: "sit", seat: seat.id });
+    return;
+  }
   if (seat) socket.send({ type: "sit", seat: seat.id });
   else socket.send({ type: "move", x: w.x, y: w.y });
   wakeHud();
@@ -179,7 +194,7 @@ window.addEventListener("keydown", (e) => {
 });
 window.addEventListener("keyup", (e) => keys.delete(e.code));
 window.setInterval(() => {
-  if (!self || keys.size === 0) return;
+  if (!self || keys.size === 0 || camera.focused) return;
   let dx = 0, dy = 0;
   for (const k of keys) { const d = KEY_DIR[k]; if (d) { dx += d[0]; dy += d[1]; } }
   if (!dx && !dy) return;

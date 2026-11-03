@@ -433,7 +433,7 @@ export class World {
   }
 
   /** 월드 좌표 근처의 빈 자리 찾기 */
-  seatNear(x: number, y: number, radius = 28): Seat | null {
+  seatNear(x: number, y: number, radius = 48): Seat | null {
     const occupied = new Set<number>();
     for (const a of this.avatars.values()) if (a.state.seat !== null && a.state.id !== this.selfId) occupied.add(a.state.seat);
     let best: Seat | null = null, bd = radius;
