@@ -3,3 +3,4 @@
 - crackle.mp3    : "Fire Crackling"        https://opengameart.org/content/fire-crackling
 - wave_1/2.mp3   : "Beach Ocean Waves"     https://opengameart.org/content/beach-ocean-waves
 - crickets.mp3   : "Crickets Ambient Noise" https://opengameart.org/content/crickets-ambient-noise-loopable
+- tear.mp3, rustle_1/2.mp3 : "Various Paper Sound Effects" https://opengameart.org/content/various-paper-sound-effects

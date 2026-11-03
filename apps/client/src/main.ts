@@ -32,6 +32,7 @@ const world = new World(canvas, $("tags"));
 const audio = new Ambience();
 world.onCrackle = (strength, near) => audio.crackleAt(strength, near);
 world.onTear = () => audio.tear();
+world.onRustle = () => audio.rustle();
 let self: PlayerState | null = null;
 let room: RoomInfo | null = null;
 let lastBurn = 0;

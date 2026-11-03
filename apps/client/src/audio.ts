@@ -60,24 +60,17 @@ export class Ambience {
     const n = strength > 0.7 ? 2 : 1;
     for (let i = 0; i < n; i++) this.playSlice("crackle", 0.18 + Math.random() * 0.22, (0.3 + strength * 0.7) * nearness, 0.85 + Math.random() * 0.4, i * 0.12);
   }
-  /** 종이 찢는 "찌익" */
+  /** 종이 찢는 소리(녹음). 매번 음높이를 조금 다르게 */
   tear() {
-    if (!this.ctx || !this.enabled) return;
-    const ctx = this.ctx, t = ctx.currentTime;
-    const src = ctx.createBufferSource();
-    src.buffer = this.noise(ctx);
-    const bp = ctx.createBiquadFilter();
-    bp.type = "bandpass"; bp.Q.value = 1.8;
-    bp.frequency.setValueAtTime(3200, t);
-    bp.frequency.exponentialRampToValueAtTime(700, t + 0.4);
-    const g = ctx.createGain();
-    g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(0.35, t + 0.04);
-    g.gain.setValueAtTime(0.35, t + 0.28);
-    g.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
-    src.connect(bp).connect(g).connect(this.master!);
-    src.start(t); src.stop(t + 0.5);
+    if (!this.enabled) return;
+    this.playSlice("tear", 0.55, 0.9, 0.92 + Math.random() * 0.16, 0);
   }
+  /** 종이 꺼내 들 때 부스럭 */
+  rustle() {
+    if (!this.enabled) return;
+    this.playSlice(Math.random() < 0.5 ? "rustle_1" : "rustle_2", 0.6, 0.6, 0.95 + Math.random() * 0.1, 0);
+  }
+
   /** 던져 넣을 때: 불똥 녹음을 길게 + 약간 낮게 */
   whoosh() {
     if (!this.enabled) return;
@@ -109,7 +102,7 @@ export class Ambience {
 
   private async load() {
     const ctx = this.ctx!;
-    const names = ["fire_loop", "crackle", "wave_1", "wave_2", "crickets"];
+    const names = ["fire_loop", "crackle", "wave_1", "wave_2", "crickets", "tear", "rustle_1", "rustle_2"];
     await Promise.all(names.map(async (n) => {
       try {
         const res = await fetch(`${BASE}${n}.mp3`);
@@ -174,14 +167,4 @@ export class Ambience {
     src.start(t, start, dur + 0.05);
   }
 
-  private noiseBuf: AudioBuffer | null = null;
-  private noise(ctx: AudioContext) {
-    if (this.noiseBuf) return this.noiseBuf;
-    const len = ctx.sampleRate;
-    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
-    const d = buf.getChannelData(0);
-    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * 0.5;
-    this.noiseBuf = buf;
-    return buf;
-  }
 }

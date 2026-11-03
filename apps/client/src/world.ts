@@ -34,8 +34,9 @@ export class World {
   private water: THREE.Mesh | null = null;
   private fx = new BurnFx();
   readonly hands = new Hands();
-  /** 찢는 순간(소리용) */
+  /** 찢는 순간 / 꺼내 드는 순간(소리용) */
   onTear: (() => void) | null = null;
+  onRustle: (() => void) | null = null;
   private raycaster = new THREE.Raycaster();
   private groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   private _kind: SceneKind = "mountain";
@@ -169,6 +170,7 @@ export class World {
     const to = new THREE.Vector3(fire.brazier.x * S, 0.45, fire.brazier.y * S);
     const hit = () => fire.burn(def.flash);
     if (playerId === this.selfId && this.rig.focused) {
+      this.onRustle?.();
       this.hands.start(def, () => this.onTear?.(), (l, r) => {
         // 손에서 떼어 월드로 옮긴 뒤 불로
         for (const m of [l, r]) {
@@ -186,6 +188,7 @@ export class World {
     const c = this.chars.get(playerId);
     if (c) {
       c.playTear();
+      this.onRustle?.();
       // 던지는 시점(약 1.0초)에 손 위치에서 조각이 날아감
       window.setTimeout(() => {
         if (!this.chars.has(playerId)) return;
