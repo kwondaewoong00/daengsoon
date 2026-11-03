@@ -12,24 +12,35 @@
     <canvas id="scene"></canvas>
     <div id="loading" class="loading" hidden><div class="dot"></div><p>불 피우는 중…</p></div>
 
+    <div id="tags" class="tags" aria-hidden="true"></div>
+
     <main id="hud">
       <header class="top">
-        <h1 class="brand">댕순</h1>
-        <button id="room-btn" class="pill" title="다른 캠프 보기">
-          <span id="room-name">캠프 찾는 중</span>
-          <span class="dim"> · </span><span id="viewer-count">–</span><span class="dim">/20</span>
+        <button id="room-btn" class="pill room" title="다른 캠프 보기">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 17l-5-5 5-5M15 12H5"/></svg>
+          <span id="room-name" class="room-name">캠프 찾는 중</span>
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="dim"><path d="M6 9l6 6 6-6"/></svg>
+          <span class="count"><span id="viewer-count">–</span><span class="dim">/20</span></span>
         </button>
-        <div class="tools">
-          <button id="sound" class="icon" aria-pressed="false" title="소리 켜기/끄기">🔇</button>
-          <button id="fullscreen" class="icon" title="전체화면">⛶</button>
+        <div class="pill tools">
+          <button id="sound" class="icon" aria-pressed="false" title="소리 켜기/끄기">
+            <svg id="sound-off" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5zM23 9l-6 6M17 9l6 6"/></svg>
+            <svg id="sound-on" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" hidden><path d="M11 5L6 9H2v6h4l5 4V5zM15.5 8.5a5 5 0 010 7M19 5a9 9 0 010 14"/></svg>
+          </button>
+          <button id="fullscreen" class="icon" title="전체화면">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 00-2 2v3M21 8V5a2 2 0 00-2-2h-3M3 16v3a2 2 0 002 2h3M16 21h3a2 2 0 002-2v-3"/></svg>
+          </button>
         </div>
       </header>
 
       <footer class="bottom">
-        <p id="hint" class="hint">화로 옆 통나무를 누르면 앉아요</p>
+        <p id="hint" class="hint">땅을 누르면 걸어가요 · 쓸어서 둘러보기 · 통나무를 누르면 앉아요</p>
         <div id="burn-bar" class="burn-bar" hidden>
           <div class="items" id="items"></div>
-          <button id="stand" class="pill">일어나기</button>
+          <button id="stand" class="item stand">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2"/><path d="M12 7v6l-3 7M12 13l3 7M8 10l4-2 4 2"/></svg>
+            <span>일어나기</span>
+          </button>
         </div>
       </footer>
     </main>

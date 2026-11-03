@@ -15,7 +15,7 @@ const loading = $("loading");
 const roomsDialog = $<HTMLDialogElement>("rooms");
 const roomList = $("room-list");
 
-const world = new World(canvas);
+const world = new World(canvas, $("tags"));
 const audio = new Ambience();
 let self: PlayerState | null = null;
 let room: RoomInfo | null = null;
@@ -153,19 +153,28 @@ function updateSeatUI() {
 }
 
 // ---------- 입력: 탭은 "거기로 걸어가", 그루터기 위면 "앉아" ----------
-let pointerDown: { x: number; y: number } | null = null;
-canvas.addEventListener("pointerdown", (e) => { pointerDown = { x: e.clientX, y: e.clientY }; });
+// 탭 = 걸어가기/앉기, 좌우로 쓸기 = 둘러보기(카메라 회전)
+let pointerDown: { x: number; y: number; lastX: number; dragging: boolean } | null = null;
+canvas.addEventListener("pointerdown", (e) => { pointerDown = { x: e.clientX, y: e.clientY, lastX: e.clientX, dragging: false }; });
 canvas.addEventListener("pointermove", (e) => {
+  if (pointerDown) {
+    const moved = Math.hypot(e.clientX - pointerDown.x, e.clientY - pointerDown.y);
+    if (moved > 12) pointerDown.dragging = true;
+    if (pointerDown.dragging && !world.rig.focused) world.rig.orbit(e.clientX - pointerDown.lastX);
+    pointerDown.lastX = e.clientX;
+    return;
+  }
   const w = world.pickGround(e.clientX, e.clientY);
   const seat = w ? world.seatNear(w.x, w.y) : null;
   world.setHoverSeat(seat);
   canvas.classList.toggle("seat-hover", !!seat);
 });
+canvas.addEventListener("pointercancel", () => { pointerDown = null; });
 canvas.addEventListener("pointerup", (e) => {
   if (!pointerDown) return;
-  const moved = Math.hypot(e.clientX - pointerDown.x, e.clientY - pointerDown.y);
+  const wasDrag = pointerDown.dragging;
   pointerDown = null;
-  if (moved > 12) return;
+  if (wasDrag) return;
   const w = world.pickGround(e.clientX, e.clientY);
   if (!w) return;
   const seat = world.seatNear(w.x, w.y, world.rig.focused ? 40 : 55);
@@ -241,8 +250,11 @@ function showRooms(rooms: RoomInfo[]) {
 // ---------- 소리 / 전체화면 / HUD ----------
 $("sound").addEventListener("click", async (e) => {
   const btn = e.currentTarget as HTMLButtonElement;
-  if (audio.enabled) { await audio.disable(); btn.textContent = "🔇"; btn.setAttribute("aria-pressed", "false"); }
-  else { await audio.enable(); btn.textContent = "🔊"; btn.setAttribute("aria-pressed", "true"); }
+  const on = !audio.enabled;
+  if (on) await audio.enable(); else await audio.disable();
+  btn.setAttribute("aria-pressed", String(on));
+  $("sound-on").hidden = !on;
+  $("sound-off").hidden = on;
 });
 $("fullscreen").addEventListener("click", () => {
   if (document.fullscreenElement) void document.exitFullscreen();

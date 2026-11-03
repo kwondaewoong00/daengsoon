@@ -13,14 +13,14 @@ const BODY_H = 0.42;
 const LEG_H = 0.22;
 const ARM_L = 0.3;
 
-const faceMat = new THREE.MeshStandardMaterial({ color: 0x15120f, roughness: 0.9 });
+const faceMat = new THREE.MeshStandardMaterial({ color: 0x1c1714, roughness: 0.95 });
 const eyeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.35, roughness: 1 });
-const headGeo = new THREE.SphereGeometry(HEAD_R, 14, 10);
+const headGeo = new THREE.SphereGeometry(HEAD_R, 24, 16);
 const eyeGeo = new THREE.BoxGeometry(0.045, 0.07, 0.02);
-const bodyGeo = new THREE.CapsuleGeometry(0.17, BODY_H - 0.34, 4, 10);
+const bodyGeo = new THREE.CapsuleGeometry(0.17, BODY_H - 0.34, 6, 16);
 const legGeo = new THREE.CapsuleGeometry(0.065, LEG_H - 0.13, 3, 8);
 const armGeo = new THREE.CapsuleGeometry(0.05, ARM_L - 0.1, 3, 8);
-const hairCapGeo = new THREE.SphereGeometry(HEAD_R + 0.03, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.55);
+const hairCapGeo = new THREE.SphereGeometry(HEAD_R + 0.03, 24, 12, 0, Math.PI * 2, 0, Math.PI * 0.55);
 const hairLongGeo = new THREE.CylinderGeometry(HEAD_R + 0.02, HEAD_R - 0.02, 0.32, 14, 1, true);
 const shoulderGeo = new THREE.BoxGeometry(0.4, 0.08, 0.22);
 
@@ -59,8 +59,9 @@ export class Character {
     this.facing = state.facing;
     this.scale = state.age === 10 ? 0.86 : 1;
     const hue = state.hue;
-    const shirt = new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(hue / 360, 0.45, 0.5), roughness: 0.85 });
-    const pants = new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(hue / 360, 0.3, 0.22), roughness: 0.9 });
+    // 파스텔 톤: 채도 낮고 밝게
+    const shirt = new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(hue / 360, 0.32, 0.62), roughness: 0.9 });
+    const pants = new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(hue / 360, 0.22, 0.36), roughness: 0.95 });
     const hair = new THREE.MeshStandardMaterial({ color: hairColor(state.age, hue), roughness: 0.8 });
 
     // 다리

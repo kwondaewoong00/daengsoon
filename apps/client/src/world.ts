@@ -26,10 +26,14 @@ export class World {
   private _kind: SceneKind = "mountain";
   private hover: Stump | null = null;
   private t = 0;
+  private tags = new Map<string, HTMLDivElement>();
+  private tagLayer: HTMLElement;
+  private tmp = new THREE.Vector3();
   selfId = "";
   ready = false;
 
-  constructor(canvas: HTMLCanvasElement) {
+  constructor(canvas: HTMLCanvasElement, tagLayer: HTMLElement) {
+    this.tagLayer = tagLayer;
     this.stage = new Stage(canvas);
     this.rig = new CameraRig(innerWidth / innerHeight);
     this.fires = BRAZIERS.map((b) => new Fire3D(b));
@@ -69,6 +73,12 @@ export class World {
       const ch = new Character(p, p.id === this.selfId);
       this.chars.set(p.id, ch);
       this.stage.scene.add(ch.group);
+      // 이름표 (HTML). 매 프레임 머리 위로 투영
+      const tag = document.createElement("div");
+      tag.className = "tag" + (p.id === this.selfId ? " me" : "");
+      tag.innerHTML = (p.id === this.selfId ? '<span class="who">나</span>' : "") + `<span>${escapeHtml(p.name)}</span>`;
+      this.tagLayer.appendChild(tag);
+      this.tags.set(p.id, tag);
     }
   }
   patch(p: Partial<PlayerState> & { id: string }) {
@@ -80,6 +90,8 @@ export class World {
     if (!c) return;
     this.stage.scene.remove(c.group);
     this.chars.delete(id);
+    this.tags.get(id)?.remove();
+    this.tags.delete(id);
   }
   clear() {
     for (const id of [...this.chars.keys()]) this.remove(id);
@@ -138,14 +150,37 @@ export class World {
   update(dt: number, camDt = dt) {
     this.t += dt;
     const me = this.chars.get(this.selfId);
-    if (me) this.rig.follow(me.x, me.y);
+    if (me) this.rig.follow(me.x, me.y, me.state.facing, me.state.moving);
     this.rig.update(camDt);
     for (const c of this.chars.values()) c.update(dt, this.t);
+    this.updateTags();
     for (const f of this.fires) f.update(dt);
     this.fx.update(dt);
     if (this.water) ((this.water.material as THREE.ShaderMaterial).uniforms.uTime.value = this.t);
     // 앉은 자리의 그루터기는 캐릭터 밑에 그대로 둠(앉아 있는 모습). 빈 자리만 하이라이트 가능
     this.stage.render(this.rig.camera);
+  }
+
+  private updateTags() {
+    const cam = this.rig.camera;
+    for (const [id, tag] of this.tags) {
+      const c = this.chars.get(id);
+      if (!c) continue;
+      c.headWorldPos(this.tmp);
+      this.tmp.y += 0.3;
+      const dist = this.tmp.distanceTo(cam.position);
+      this.tmp.project(cam);
+      const behind = this.tmp.z > 1;
+      if (behind || dist > 16) {
+        tag.style.display = "none";
+        continue;
+      }
+      tag.style.display = "";
+      const x = ((this.tmp.x + 1) / 2) * innerWidth;
+      const y = ((1 - this.tmp.y) / 2) * innerHeight;
+      tag.style.transform = `translate(-50%, -100%) translate(${x.toFixed(0)}px, ${y.toFixed(0)}px)`;
+      tag.style.opacity = String(Math.max(0.25, 1 - dist / 16));
+    }
   }
 
   /** 가장 가까운 화로까지의 거리(월드 단위) */
@@ -156,4 +191,8 @@ export class World {
   }
 
   static readonly bounds = WORLD;
+}
+
+function escapeHtml(t: string) {
+  return t.replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]!);
 }

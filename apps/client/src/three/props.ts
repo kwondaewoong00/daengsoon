@@ -99,10 +99,21 @@ export function makeSurroundings(kind: SceneKind): { group: THREE.Group; water: 
   let water: THREE.Mesh | null = null;
 
   if (kind === "mountain") {
-    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x3b2a1c, roughness: 1 });
-    const leafMats = [0x1e3a24, 0x24452a, 0x1a3320, 0x2b4a2e].map((c) => new THREE.MeshStandardMaterial({ color: c, roughness: 1, flatShading: true }));
-    const trunkGeo = new THREE.CylinderGeometry(0.12, 0.18, 1.2, 6);
-    const coneGeo = new THREE.ConeGeometry(1, 2.2, 7);
+    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x4a3626, roughness: 1 });
+    const leafMats = [0x2f5a33, 0x3a6a3a, 0x29512d, 0x4a6b2e, 0x5a6a2a].map((c) => new THREE.MeshStandardMaterial({ color: c, roughness: 1 }));
+    const trunkGeo = new THREE.CylinderGeometry(0.12, 0.2, 1.4, 8);
+    const coneGeo = new THREE.ConeGeometry(1, 2.2, 9);
+    const blobGeo = new THREE.IcosahedronGeometry(1, 1);
+    // 활엽수 잎덩어리: 꼭짓점을 울퉁불퉁하게
+    {
+      const pos = blobGeo.attributes.position as THREE.BufferAttribute;
+      for (let i = 0; i < pos.count; i++) {
+        const v = new THREE.Vector3().fromBufferAttribute(pos, i);
+        v.multiplyScalar(0.85 + Math.random() * 0.3);
+        pos.setXYZ(i, v.x, v.y, v.z);
+      }
+      blobGeo.computeVertexNormals();
+    }
     const trees = new THREE.Group();
     for (let i = 0; i < 260; i++) {
       // 캠프 바깥 링(24m~44m)에 흩뿌림. 카메라가 캠프 아래쪽 9.5m 뒤까지 물러나므로 그보다 바깥
@@ -112,13 +123,25 @@ export function makeSurroundings(kind: SceneKind): { group: THREE.Group; water: 
       const h = 0.8 + Math.random() * 1.2;
       const t = new THREE.Group();
       const trunk = new THREE.Mesh(trunkGeo, trunkMat);
-      trunk.position.y = 0.6;
+      trunk.position.y = 0.7;
       t.add(trunk);
-      for (let j = 0; j < 3; j++) {
-        const c = new THREE.Mesh(coneGeo, leafMats[(i + j) % leafMats.length]);
-        c.position.y = 1.4 + j * 1.1;
-        c.scale.setScalar(1.3 - j * 0.3);
-        t.add(c);
+      if (i % 3 === 0) {
+        // 침엽수
+        for (let j = 0; j < 3; j++) {
+          const c = new THREE.Mesh(coneGeo, leafMats[(i + j) % leafMats.length]);
+          c.position.y = 1.6 + j * 1.1;
+          c.scale.setScalar(1.3 - j * 0.3);
+          t.add(c);
+        }
+      } else {
+        // 활엽수: 잎덩어리 3~4개
+        const n = 3 + (i % 2);
+        for (let j = 0; j < n; j++) {
+          const c = new THREE.Mesh(blobGeo, leafMats[(i * 7 + j) % leafMats.length]);
+          c.position.set((Math.random() - 0.5) * 1.2, 2.0 + Math.random() * 1.2, (Math.random() - 0.5) * 1.2);
+          c.scale.setScalar(0.9 + Math.random() * 0.6);
+          t.add(c);
+        }
       }
       t.position.set(x, 0, z);
       t.scale.setScalar(h);

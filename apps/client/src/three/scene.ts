@@ -32,7 +32,7 @@ export class Stage {
     this.scene.background = new THREE.Color(0x0a0806);
     this.scene.fog = new THREE.FogExp2(0x0b0a10, 0.02);
 
-    this.hemi = new THREE.HemisphereLight(0x46445e, 0x1a120c, 0.4);
+    this.hemi = new THREE.HemisphereLight(0x5a5a78, 0x241a12, 0.55);
     this.scene.add(this.hemi);
     this.moon = new THREE.DirectionalLight(0x9aa8d8, 0.22);
     this.moon.position.set(-20, 30, -10);

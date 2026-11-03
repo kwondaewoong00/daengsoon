@@ -81,6 +81,13 @@ export function parseProfile(g: string | null, a: string | null): Profile {
   return { gender, age };
 }
 
+// ---------- 이름표 ----------
+export const NICK_ADJ = ["다정한", "조용한", "느긋한", "졸린", "따뜻한", "수줍은", "씩씩한", "포근한", "말없는", "나른한", "반짝이는", "어슬렁대는", "흐뭇한", "심심한", "홀가분한", "촉촉한"];
+export const NICK_NOUN = ["이끼", "솔방울", "조약돌", "파도", "장작", "반딧불", "낙엽", "모래알", "달빛", "도토리", "갈대", "별똥별", "나뭇잎", "연기", "물결", "고구마"];
+export function randomNick(rand = Math.random): string {
+  return `${NICK_ADJ[Math.floor(rand() * NICK_ADJ.length)]} ${NICK_NOUN[Math.floor(rand() * NICK_NOUN.length)]}`;
+}
+
 // ---------- 캠프 종류 ----------
 export type SceneKind = "mountain" | "sea";
 export const SCENES: Record<SceneKind, { label: string; emoji: string }> = {
@@ -106,6 +113,8 @@ export function itemById(id: string): ItemDef | undefined {
 // ---------- 상태 ----------
 export interface PlayerState {
   id: string;
+  /** 서버가 지어주는 이름표. 예: "다정한 이끼" */
+  name: string;
   gender: Gender;
   age: AgeBand;
   x: number;

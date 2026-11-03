@@ -6,6 +6,7 @@ import {
   WORLD,
   HORIZON_Y,
   itemById,
+  randomNick,
   roomKind,
   roomName,
   type Profile,
@@ -63,6 +64,7 @@ export class Room {
     // 입구(아래쪽 가운데)에 살짝 흩어져서 등장
     const state: PlayerState = {
       id: client.id,
+      name: randomNick(),
       gender: profile.gender,
       age: profile.age,
       x: WORLD.w / 2 + (Math.random() - 0.5) * 160,
