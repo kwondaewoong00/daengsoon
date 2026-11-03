@@ -1,6 +1,7 @@
 import { ITEMS, BRAZIERS, SCENES, roomKind, roomIdValid, makeRoomId, seatById, type PlayerState, type RoomInfo, type SceneKind, type ServerMessage, itemById } from "@daengsoon/shared";
 import { Ambience } from "./audio";
 import { RoomSocket } from "./socket";
+import { LocalServer } from "./demo";
 import { World } from "./world";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -17,10 +18,13 @@ const roomList = $("room-list");
 
 const world = new World(canvas, $("tags"));
 const audio = new Ambience();
+world.onCrackle = (strength, near) => audio.crackleAt(strength, near);
 let self: PlayerState | null = null;
 let room: RoomInfo | null = null;
 let lastBurn = 0;
-let socket: RoomSocket;
+let socket: RoomSocket | LocalServer;
+// 체험판: 빌드 시 VITE_DEMO=1 이거나 주소에 ?demo 가 있으면 서버 없이 브라우저 안에서 돌림
+const DEMO = import.meta.env.VITE_DEMO === "1" || new URLSearchParams(location.search).has("demo");
 
 const params = new URLSearchParams(location.search);
 // 자동 테스트용: ?debug 일 때만 월드를 밖으로 노출
@@ -36,6 +40,11 @@ const entryForm = $<HTMLFormElement>("entry-form");
   for (const [name, value] of Object.entries(saved)) {
     const input = entryForm.querySelector<HTMLInputElement>(`input[name="${name}"][value="${value}"]`);
     if (input) input.checked = true;
+  }
+  const presetKind = params.get("kind");
+  if (presetKind === "sea" || presetKind === "mountain") {
+    const k = entryForm.querySelector<HTMLInputElement>(`input[name="kind"][value="${presetKind}"]`);
+    if (k) k.checked = true;
   }
   if (wantedRoom !== "auto") {
     $("kind-field").hidden = true;
@@ -56,10 +65,13 @@ async function start(kind: SceneKind, gender: string, age: string) {
   loading.hidden = false;
   audio.setKind(kind);
   // 하늘·땅을 받는 동안 서버 연결도 같이 진행
-  socket = new RoomSocket(wantedRoom, { kind, g: gender, a: age }, onMessage, (s) => {
+  const onStatus = (s: "connecting" | "open" | "closed") => {
     if (s === "connecting") roomNameEl.textContent = "캠프 찾는 중";
     if (s === "closed") viewerCount.textContent = "–";
-  });
+  };
+  socket = DEMO
+    ? new LocalServer(kind, { g: gender, a: age }, onMessage, onStatus)
+    : new RoomSocket(wantedRoom, { kind, g: gender, a: age }, onMessage, onStatus);
   socket.connect();
   try {
     await world.setKind(kind);
@@ -81,7 +93,7 @@ function onMessage(msg: ServerMessage) {
       setRoom(msg.room);
       if (world.kind !== msg.room.kind) void world.setKind(msg.room.kind);
       audio.setKind(msg.room.kind);
-      history.replaceState(null, "", `?room=${msg.room.id}${params.has("debug") ? "&debug" : ""}`);
+      if (!DEMO) history.replaceState(null, "", `?room=${msg.room.id}${params.has("debug") ? "&debug" : ""}`);
       updateSeatUI();
       break;
     case "join":
@@ -160,7 +172,7 @@ canvas.addEventListener("pointermove", (e) => {
   if (pointerDown) {
     const moved = Math.hypot(e.clientX - pointerDown.x, e.clientY - pointerDown.y);
     if (moved > 12) pointerDown.dragging = true;
-    if (pointerDown.dragging && !world.rig.focused) world.rig.orbit(e.clientX - pointerDown.lastX);
+    if (pointerDown.dragging) world.rig.orbit(e.clientX - pointerDown.lastX);
     pointerDown.lastX = e.clientX;
     return;
   }
@@ -209,6 +221,14 @@ window.setInterval(() => {
 
 // ---------- 방 목록 ----------
 $("room-btn").addEventListener("click", async () => {
+  if (DEMO) {
+    const other = world.kind === "mountain" ? "sea" : "mountain";
+    const u = new URL(location.href);
+    u.searchParams.set("kind", other);
+    u.searchParams.set("demo", "1");
+    location.href = u.toString();
+    return;
+  }
   try {
     const res = await fetch("/api/rooms");
     const data = (await res.json()) as { rooms: RoomInfo[] };

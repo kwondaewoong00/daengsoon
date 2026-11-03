@@ -15,7 +15,7 @@ import {
   type PlayerState,
   type RoomInfo,
   type ServerMessage,
-} from "@daengsoon/shared";
+} from "./protocol";
 
 export interface Client {
   id: string;

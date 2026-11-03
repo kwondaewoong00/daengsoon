@@ -22,6 +22,8 @@ export class CameraRig {
   /** 카메라가 바라보는 방향(월드 facing 과 같은 단위). 캐릭터 facing을 천천히 따라감 */
   private yaw = -Math.PI / 2;
   private seat: number | null = null;
+  /** 앉아서 고개 돌린 각도(라디안). 쓸기로 바뀌고, 손을 떼면 천천히 불 쪽으로 돌아옴 */
+  private headTurn = 0;
   private portrait = true;
   private snap = true;
 
@@ -44,9 +46,14 @@ export class CameraRig {
   }
   /** 손가락으로 쓸어 둘러보기. dx = 화면 픽셀 */
   orbit(dxPixels: number) {
-    this.yaw += dxPixels * 0.006;
+    if (this.seat !== null) {
+      this.headTurn = Math.max(-1.3, Math.min(1.3, this.headTurn - dxPixels * 0.005));
+    } else {
+      this.yaw += dxPixels * 0.006;
+    }
   }
   focusSeat(seatId: number | null) {
+    if (seatId !== this.seat) this.headTurn = 0;
     this.seat = seatId;
   }
   get focused() {
@@ -56,7 +63,10 @@ export class CameraRig {
     return this.yaw;
   }
 
+  private breath = 0;
+
   update(dt: number) {
+    this.breath += dt;
     const seat = this.seat !== null ? seatById(this.seat) : undefined;
     if (seat) {
       const b = BRAZIERS[seat.brazier];
@@ -65,11 +75,19 @@ export class CameraRig {
       const dx = sx - fx, dz = sz - fz;
       const len = Math.hypot(dx, dz) || 1;
       const nx = dx / len, nz = dz / len;
-      const back = this.portrait ? 2.4 : 2.1;
-      const side = this.portrait ? 1.0 : 1.3;
-      const height = this.portrait ? 2.3 : 1.9;
-      this.targetPos.set(sx + nx * back + -nz * side, height, sz + nz * back + nx * side);
-      this.targetLook.set(fx - nx * 0.2, 0.5, fz - nz * 0.2);
+      // 1인칭: 앉은 내 눈 높이(약 0.95m)에서 불을 바라봄. 숨쉬듯 아주 살짝 흔들림
+      // 1인 화로는 바로 코앞(0.5m)이라 눈을 조금 더 들고 뒤로 물러남
+      const small = b.size === "small";
+      const eyeH = (small ? 1.15 : 1.0) + Math.sin(this.breath * 1.1) * 0.012;
+      const backOff = small ? 0.25 : 0.05;
+      this.targetPos.set(sx + nx * backOff, eyeH, sz + nz * backOff);
+      // 시선: 불꽃 한가운데. 고개를 돌리면 그 방향으로
+      const toFire = Math.atan2(-nz, -nx) + this.headTurn;
+      const lookDist = small ? 0.9 : 1.2;
+      const lookH = (small ? 0.75 : 0.7) - Math.abs(this.headTurn) * 0.15;
+      this.targetLook.set(sx + Math.cos(toFire) * lookDist, lookH, sz + Math.sin(toFire) * lookDist);
+      // 손을 뗀 뒤 천천히 불 쪽으로 돌아옴
+      this.headTurn *= 1 - Math.min(1, dt * 0.35);
       this.yaw = Math.atan2(-nz, -nx); // 일어났을 때 불 쪽을 보고 시작
     } else {
       // 걷는 중이면 카메라가 걷는 방향 뒤로 천천히 돌아감
@@ -86,7 +104,7 @@ export class CameraRig {
       this.targetPos.set(px - fx * back, up, pz - fz * back);
       this.targetLook.set(px + fx * 2.5, 0.9, pz + fz * 2.5);
     }
-    const k = this.snap ? 1 : Math.min(1, dt * 3.5);
+    const k = this.snap ? 1 : Math.min(1, dt * (seat ? 2.2 : 3.5));
     this.snap = false;
     this.pos.lerp(this.targetPos, k);
     this.look.lerp(this.targetLook, k);

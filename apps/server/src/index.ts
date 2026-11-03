@@ -3,9 +3,8 @@ import { readFile, stat } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
-import { parseProfile, type ClientMessage, type ServerMessage } from "@daengsoon/shared";
+import { parseProfile, type ClientMessage, type Room, type ServerMessage } from "@daengsoon/shared";
 import { RoomManager } from "./rooms.js";
-import type { Room } from "./room.js";
 
 const PORT = Number(process.env.PORT ?? 8787);
 const here = fileURLToPath(new URL(".", import.meta.url));

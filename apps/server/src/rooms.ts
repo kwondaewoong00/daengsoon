@@ -1,5 +1,4 @@
-import { MAX_ROOMS, ROOM_CAPACITY, makeRoomId, roomIdValid, roomKind, type RoomInfo, type SceneKind } from "@daengsoon/shared";
-import { Room } from "./room.js";
+import { MAX_ROOMS, ROOM_CAPACITY, Room, makeRoomId, roomIdValid, roomKind, type RoomInfo, type SceneKind } from "@daengsoon/shared";
 
 /**
  * RoomManager = 매표소. 방을 만들고, 빈자리 있는 방으로 안내합니다.

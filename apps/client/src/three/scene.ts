@@ -54,7 +54,7 @@ export class Stage {
 
   private async loadSky(id: string, exposure: number, bg: number, envIntensity: number) {
     if (this.loadedSky === id) return;
-    const hdr = await new RGBELoader().loadAsync(`/assets/hdri/${id}_1k.hdr`);
+    const hdr = await new RGBELoader().loadAsync(`${import.meta.env.BASE_URL}assets/hdri/${id}_1k.hdr`);
     hdr.mapping = THREE.EquirectangularReflectionMapping;
     const env = this.pmrem.fromEquirectangular(hdr).texture;
     this.scene.environment = env;
@@ -68,7 +68,7 @@ export class Stage {
 
   private async loadGround(id: string, repeat: number, kind: SceneKind) {
     if (this.loadedGround === id) return;
-    const base = `/assets/tex/${id}/${id}`;
+    const base = `${import.meta.env.BASE_URL}assets/tex/${id}/${id}`;
     const [diff, nor, arm] = await Promise.all([
       this.texLoader.loadAsync(`${base}_diff_1k.jpg`),
       this.texLoader.loadAsync(`${base}_nor_gl_1k.jpg`),

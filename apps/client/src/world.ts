@@ -31,13 +31,24 @@ export class World {
   private tmp = new THREE.Vector3();
   selfId = "";
   ready = false;
+  /** 가까운 불이 타닥 할 때(0~1 세기, 0~1 가까움) */
+  onCrackle: ((strength: number, nearness: number) => void) | null = null;
 
   constructor(canvas: HTMLCanvasElement, tagLayer: HTMLElement) {
     this.tagLayer = tagLayer;
     this.stage = new Stage(canvas);
     this.rig = new CameraRig(innerWidth / innerHeight);
     this.fires = BRAZIERS.map((b) => new Fire3D(b));
-    for (const f of this.fires) this.stage.scene.add(f.group);
+    for (const f of this.fires) {
+      this.stage.scene.add(f.group);
+      f.onPop = (strength) => {
+        const me = this.chars.get(this.selfId);
+        if (!me) return;
+        const d = Math.hypot(f.brazier.x - me.x, f.brazier.y - me.y);
+        const near = Math.max(0, 1 - d / 420);
+        if (near > 0.05) this.onCrackle?.(strength, near);
+      };
+    }
     for (const g of makeBraziers()) this.stage.scene.add(g);
     this.stumps = makeStumps();
     for (const s of this.stumps) this.stage.scene.add(s.mesh);
@@ -150,7 +161,14 @@ export class World {
   update(dt: number, camDt = dt) {
     this.t += dt;
     const me = this.chars.get(this.selfId);
-    if (me) this.rig.follow(me.x, me.y, me.state.facing, me.state.moving);
+    if (me) {
+      this.rig.follow(me.x, me.y, me.state.facing, me.state.moving);
+      // 1인칭(앉음)에서는 내 몸이 카메라를 가리므로 숨김. 이름표도 같이.
+      const firstPerson = this.rig.focused;
+      me.group.visible = !firstPerson;
+      const myTag = this.tags.get(this.selfId);
+      if (myTag) myTag.style.visibility = firstPerson ? "hidden" : "";
+    }
     this.rig.update(camDt);
     for (const c of this.chars.values()) c.update(dt, this.t);
     this.updateTags();

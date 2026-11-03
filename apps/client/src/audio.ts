@@ -42,6 +42,14 @@ export class Ambience {
     this.fireGain.gain.setTargetAtTime(0.08 + v * 0.6, this.ctx.currentTime, 0.4);
   }
 
+  /** 불똥 터질 때 "타닥". 가까울수록 크고, 센 것은 두세 번 연달아 */
+  crackleAt(strength: number, nearness: number) {
+    if (!this.ctx || !this.enabled) return;
+    const t = this.ctx.currentTime;
+    const n = strength > 0.7 ? 3 : strength > 0.3 ? 2 : 1;
+    for (let i = 0; i < n; i++) this.crackle(t + i * (0.03 + Math.random() * 0.05), (0.25 + strength * 0.6) * nearness);
+  }
+
   /** 무언가 태울 때 "화르륵" */
   whoosh() {
     if (!this.ctx || !this.enabled) return;
@@ -67,8 +75,8 @@ export class Ambience {
     this.fireGain = fireGain;
 
     const schedule = () => {
-      if (this.enabled) this.crackle(ctx.currentTime, 0.1 + this.nearness * 0.3);
-      window.setTimeout(schedule, 120 + Math.random() * (700 - this.nearness * 450));
+      if (this.enabled) this.crackle(ctx.currentTime, 0.04 + this.nearness * 0.1);
+      window.setTimeout(schedule, 300 + Math.random() * 900);
     };
     schedule();
 
