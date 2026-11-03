@@ -61,6 +61,21 @@ const scarfGeo = new THREE.TorusGeometry(0.2, 0.06, 10, 24);
 const glassRimGeo = new THREE.TorusGeometry(0.058, 0.008, 6, 16);
 const glassBridgeGeo = new THREE.BoxGeometry(0.06, 0.008, 0.008);
 const paperGeo = new THREE.PlaneGeometry(0.16, 0.22);
+let shadowTex: THREE.Texture | null = null;
+function shadowTexture() {
+  if (shadowTex) return shadowTex;
+  const c = document.createElement("canvas");
+  c.width = c.height = 64;
+  const g = c.getContext("2d")!;
+  const grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grd.addColorStop(0, "rgba(0,0,0,0.55)");
+  grd.addColorStop(0.6, "rgba(0,0,0,0.3)");
+  grd.addColorStop(1, "rgba(0,0,0,0)");
+  g.fillStyle = grd; g.fillRect(0, 0, 64, 64);
+  shadowTex = new THREE.CanvasTexture(c);
+  return shadowTex;
+}
+const shadowGeo = new THREE.PlaneGeometry(0.9, 0.9);
 const halfGeoL = new THREE.PlaneGeometry(0.08, 0.22).translate(-0.04, 0, 0);
 const halfGeoR = new THREE.PlaneGeometry(0.08, 0.22).translate(0.04, 0, 0);
 
@@ -269,6 +284,11 @@ export class Character {
     this.root.add(this.legL, this.legR, this.body, this.armL, this.armR, this.pack, this.head);
     this.root.scale.setScalar(this.scale);
     this.group.add(this.root);
+    // 발밑 그림자(땅에 붙은 느낌)
+    const shadow = new THREE.Mesh(shadowGeo, new THREE.MeshBasicMaterial({ map: shadowTexture(), transparent: true, depthWrite: false }));
+    shadow.rotation.x = -Math.PI / 2;
+    shadow.position.y = 0.005;
+    this.group.add(shadow);
 
     if (isSelf) {
       this.ring = new THREE.Mesh(
@@ -336,10 +356,11 @@ export class Character {
     this.legL.rotation.x = swing * (1 - sit) + (-Math.PI / 2) * sit;
     this.legR.rotation.x = -swing * (1 - sit) + (-Math.PI / 2) * sit;
 
-    // 팔: 기본은 걷기/앉기. 찢기 동작 중엔 덮어씀
-    let armLx = -swing * 0.9 * (1 - sit) + -0.6 * sit;
-    let armRx = swing * 0.9 * (1 - sit) + -0.6 * sit;
-    let armLz = 0.15, armRz = -0.15;
+    // 팔: 걷기 흔들림 / 앉으면 가끔 불 쪽으로 손을 내밀어 쬠(사람마다 박자 다름)
+    const warm = sit * Math.max(0, Math.sin(t * 0.3 + st.hue * 0.1)) ** 2;
+    let armLx = -swing * 0.9 * (1 - sit) + (-0.6 - 1.0 * warm) * sit;
+    let armRx = swing * 0.9 * (1 - sit) + (-0.6 - 1.0 * warm) * sit;
+    let armLz = 0.15 - 0.25 * warm, armRz = -0.15 + 0.25 * warm;
     if (this.tearT >= 0) {
       this.tearT += dt;
       const T = this.tearT;
@@ -361,6 +382,7 @@ export class Character {
     this.head.position.y = headBase + bob + breathe * 1.5 + (st.age >= 50 ? -0.03 : 0);
     this.head.rotation.x = (st.age >= 60 ? 0.12 : 0) + (walking ? Math.sin(this.step * 2) * 0.03 : 0) + 0.12 * sit;
     this.head.rotation.z = walking ? Math.sin(this.step) * 0.04 : 0;
+    this.head.rotation.y = sit * Math.sin(t * 0.17 + st.hue * 0.2) * 0.35;
     if (this.pack) this.pack.position.y = LEG_H + BODY_H * 0.55 + bob;
     if (this.ring) this.ring.material.opacity = 0.35 + Math.sin(t * 2) * 0.12;
   }

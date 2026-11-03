@@ -158,8 +158,8 @@ button:active { transform: scale(0.96); }
 }
 .lobby {
   position: fixed; inset: 0; z-index: 6; overflow-y: auto; -webkit-overflow-scrolling: touch;
-  background: linear-gradient(180deg, rgba(10, 8, 6, 0.35), rgba(10, 8, 6, 0.75) 40%, rgba(10, 8, 6, 0.92));
-  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  background: linear-gradient(180deg, rgba(10, 8, 6, 0.15), rgba(10, 8, 6, 0.45) 45%, rgba(10, 8, 6, 0.8));
+  backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
   transition: opacity 0.8s var(--ease);
 }
 .lobby[hidden] { display: none; }

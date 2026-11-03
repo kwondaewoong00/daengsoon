@@ -76,6 +76,12 @@ function readProfile() {
   try { localStorage.setItem("daengsoon:who", JSON.stringify(who)); } catch { /* 무시 */ }
   return who;
 }
+// 첫 화면 뒤에 캠프가 미리 살아 있게(불·텐트·줄전구). 산을 기본으로 받아 둠
+{
+  const saved = (() => { try { return JSON.parse(localStorage.getItem("daengsoon:who") ?? "{}"); } catch { return {}; } })();
+  const pre: SceneKind = wantedRoom !== "auto" ? roomKind(wantedRoom) : saved.kind === "sea" ? "sea" : "mountain";
+  void world.setKind(pre).catch(() => {});
+}
 entryForm.addEventListener("submit", (e) => {
   e.preventDefault();
   // 버튼 클릭은 사용자 동작이라 이 안에서 소리를 켤 수 있음(브라우저 자동재생 제한)
@@ -138,10 +144,14 @@ function onMessage(msg: ServerMessage) {
       break;
     case "join":
       world.upsert(msg.player);
+      if (msg.player.id !== world.selfId) showToast(`${msg.player.name} 님이 왔어요`);
       break;
-    case "leave":
+    case "leave": {
+      const gone = world.chars.get(msg.id)?.state.name;
       world.remove(msg.id);
+      if (gone) showToast(`${gone} 님이 갔어요`);
       break;
+    }
     case "update":
       for (const p of msg.players) {
         world.patch(p);
@@ -435,6 +445,19 @@ function resize() {
 window.addEventListener("resize", resize);
 resize();
 
+// 자동 저사양: 들어간 뒤 5초 동안 평균 프레임이 낮으면 해상도·풀을 줄임
+let fpsSamples: number[] = [];
+let fpsChecked = false;
+function sampleFps(dt: number) {
+  if (fpsChecked || !self || dt <= 0) return;
+  fpsSamples.push(1 / dt);
+  if (fpsSamples.length >= 240) {
+    fpsChecked = true;
+    const avg = fpsSamples.reduce((a, b) => a + b, 0) / fpsSamples.length;
+    if (avg < 40) { world.setQuality("low"); showToast("폰에 맞춰 화면을 가볍게 했어요"); }
+  }
+}
+
 let last = performance.now();
 function frame(now: number) {
   const raw = (now - last) / 1000;
@@ -445,6 +468,7 @@ function frame(now: number) {
     if (me) audio.setNearness(Math.max(0, 1 - world.nearestFireDistance(me.x, me.y) / 420));
   }
   world.update(dt, Math.min(0.3, raw));
+  sampleFps(raw);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

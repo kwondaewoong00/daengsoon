@@ -125,7 +125,7 @@ function grassTexture() {
  * 땅 위 장식: 풀 포기(인스턴스), 덤불, 돌멩이, 화로 옆 돌탑.
  * InstancedMesh = 같은 모양을 수천 개 그릴 때 한 번의 그리기 명령으로 끝내는 기법(폰에 중요).
  */
-export function makeGroundDressing(kind: SceneKind): THREE.Group {
+export function makeGroundDressing(kind: SceneKind): THREE.Group & { grass?: THREE.InstancedMesh[] } {
   const g = new THREE.Group();
   const W = WORLD.w * S, H = WORLD.h * S;
   const margin = 7;
@@ -182,6 +182,7 @@ export function makeGroundDressing(kind: SceneKind): THREE.Group {
   }
   a.count = placed; b.count = placed;
   g.add(a, b);
+  (g as THREE.Group & { grass?: THREE.InstancedMesh[] }).grass = [a, b];
 
   // --- 덤불 ---
   if (kind === "mountain") {
@@ -280,7 +281,7 @@ export class Motes {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute("position", new THREE.BufferAttribute(this.pos, 3));
     geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
-    const mat = new THREE.PointsMaterial({ size: 0.06, vertexColors: true, transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true });
+    const mat = new THREE.PointsMaterial({ size: 0.09, map: glowTexture(), vertexColors: true, transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true });
     this.points = new THREE.Points(geo, mat);
     this.points.frustumCulled = false;
     this.update(0);
@@ -302,6 +303,116 @@ export class Motes {
       }
     }
     (this.points.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
+  }
+}
+
+/** 둥근 빛 스프라이트(랜턴·전구·텐트 창 발광용) */
+let glowTex: THREE.Texture | null = null;
+function glowTexture() {
+  if (glowTex) return glowTex;
+  const c = document.createElement("canvas");
+  c.width = c.height = 64;
+  const g = c.getContext("2d")!;
+  const grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grd.addColorStop(0, "rgba(255,255,255,1)");
+  grd.addColorStop(0.25, "rgba(255,255,255,0.5)");
+  grd.addColorStop(1, "rgba(255,255,255,0)");
+  g.fillStyle = grd; g.fillRect(0, 0, 64, 64);
+  glowTex = new THREE.CanvasTexture(c);
+  return glowTex;
+}
+
+/**
+ * 캠프 소품: 텐트 4동(안에서 따뜻한 빛), 기둥 사이 줄전구, 그루터기 옆 랜턴.
+ * 진짜 조명(PointLight)은 폰에 부담이라 '빛나는 재질 + 글로우 스프라이트'로 빛나는 척만 합니다.
+ */
+export class CampDecor {
+  readonly group = new THREE.Group();
+  private bulbs: THREE.Points | null = null;
+  private tentGlows: THREE.Sprite[] = [];
+  private lanternGlows: THREE.Sprite[] = [];
+  constructor(kind: SceneKind) {
+    const W = WORLD.w * S, H = WORLD.h * S, cx = W / 2;
+    const canvasMat = new THREE.MeshStandardMaterial({ color: kind === "sea" ? 0x7a8da0 : 0x8a7a52, roughness: 1, side: THREE.DoubleSide });
+    const canvasLit = new THREE.MeshStandardMaterial({ color: 0xffcf8a, emissive: 0xff9a3c, emissiveIntensity: 0.9, roughness: 1, side: THREE.DoubleSide });
+    const poleMat = new THREE.MeshStandardMaterial({ color: 0x4a3a2a, roughness: 1 });
+    // --- 텐트: 캠프 네 모서리 바깥 ---
+    const tentGeo = new THREE.ConeGeometry(1.3, 1.5, 4, 1, true);
+    const doorGeo = new THREE.PlaneGeometry(0.7, 0.9);
+    for (const [tx, tz, ry] of [[3, 5, 0.3], [W - 3, 5, -0.4], [3, H - 3, 1.2], [W - 3, H - 3, -1.1]] as const) {
+      const t = new THREE.Group();
+      const body = new THREE.Mesh(tentGeo, canvasMat);
+      body.position.y = 0.75;
+      body.rotation.y = Math.PI / 4;
+      const door = new THREE.Mesh(doorGeo, canvasLit);
+      door.position.set(0, 0.42, 0.92);
+      door.rotation.x = -0.55;
+      const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: 0xffb060, transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false }));
+      glow.position.set(0, 0.5, 1.0);
+      glow.scale.setScalar(2.2);
+      this.tentGlows.push(glow);
+      t.add(body, door, glow);
+      t.position.set(tx, 0, tz);
+      t.rotation.y = ry + Math.atan2(cx - tx, H / 2 - tz); // 문이 캠프 안쪽을 향하게
+      this.group.add(t);
+    }
+    // --- 줄전구: 기둥 6개를 캠프 둘레에 세우고 사이를 늘어진 줄로 연결 ---
+    const poles: [number, number][] = [[W * 0.18, 2.2], [W * 0.5, 1.6], [W * 0.82, 2.2], [W * 0.82, H - 1.4], [W * 0.5, H - 0.8], [W * 0.18, H - 1.4]];
+    const poleGeo = new THREE.CylinderGeometry(0.05, 0.07, 3.4, 6);
+    const positions: number[] = [];
+    const wireMat = new THREE.LineBasicMaterial({ color: 0x1a1410 });
+    for (let i = 0; i < poles.length; i++) {
+      const [px, pz] = poles[i];
+      const pole = new THREE.Mesh(poleGeo, poleMat);
+      pole.position.set(px, 1.7, pz);
+      this.group.add(pole);
+      const [qx, qz] = poles[(i + 1) % poles.length];
+      if (i === 2 || i === 5) continue; // 양 옆(동서)은 비워 둠: 캠프를 가로막지 않게
+      const pts: THREE.Vector3[] = [];
+      const n = 14;
+      for (let j = 0; j <= n; j++) {
+        const k = j / n;
+        const sag = Math.sin(k * Math.PI) * 0.55;
+        const x = px + (qx - px) * k, z = pz + (qz - pz) * k, y = 3.3 - sag;
+        pts.push(new THREE.Vector3(x, y, z));
+        if (j > 0 && j < n) positions.push(x, y - 0.08, z);
+      }
+      this.group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), wireMat));
+    }
+    const bulbGeo = new THREE.BufferGeometry();
+    bulbGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(positions), 3));
+    const bulbMat = new THREE.PointsMaterial({ size: 0.11, map: glowTexture(), color: 0xffd9a0, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true });
+    this.bulbs = new THREE.Points(bulbGeo, bulbMat);
+    this.group.add(this.bulbs);
+    // --- 랜턴: 큰 화로 옆 그루터기 하나씩 ---
+    const lanternBody = new THREE.CylinderGeometry(0.09, 0.11, 0.22, 8);
+    const lanternCap = new THREE.ConeGeometry(0.13, 0.08, 8);
+    const metal = new THREE.MeshStandardMaterial({ color: 0x3a3430, roughness: 0.7, metalness: 0.4 });
+    const glass = new THREE.MeshStandardMaterial({ color: 0xffe0a8, emissive: 0xffb860, emissiveIntensity: 1.2, roughness: 0.3 });
+    for (const b of BRAZIERS) {
+      if (b.size !== "large") continue;
+      const seat = b.seats[1];
+      const lx = seat.x * S - 0.55, lz = seat.y * S + 0.2;
+      const l = new THREE.Group();
+      const body = new THREE.Mesh(lanternBody, glass);
+      body.position.y = 0.11;
+      const cap = new THREE.Mesh(lanternCap, metal);
+      cap.position.y = 0.26;
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.02, 8), metal);
+      base.position.y = 0.01;
+      const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: 0xffc070, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false }));
+      glow.position.y = 0.12;
+      glow.scale.setScalar(0.9);
+      this.lanternGlows.push(glow);
+      l.add(base, body, cap, glow);
+      l.position.set(lx, 0, lz);
+      this.group.add(l);
+    }
+  }
+  update(t: number) {
+    if (this.bulbs) (this.bulbs.material as THREE.PointsMaterial).opacity = 0.85 + Math.sin(t * 2.1) * 0.08 + Math.sin(t * 7.3) * 0.04;
+    for (const [i, g] of this.tentGlows.entries()) g.material.opacity = 0.4 + Math.sin(t * 0.9 + i) * 0.06;
+    for (const [i, g] of this.lanternGlows.entries()) g.material.opacity = 0.45 + Math.sin(t * 5 + i * 2) * 0.08 + Math.random() * 0.03;
   }
 }
 

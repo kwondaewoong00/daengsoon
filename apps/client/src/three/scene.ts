@@ -41,6 +41,10 @@ export class Stage {
   resize(w: number, h: number) {
     this.renderer.setSize(w, h, false);
   }
+  setPixelRatio(r: number) {
+    this.renderer.setPixelRatio(r);
+    this.renderer.setSize(innerWidth, innerHeight, false);
+  }
 
   /** 산/바다에 맞는 하늘과 땅을 불러옵니다. 이미 같은 걸 쓰고 있으면 아무것도 안 합니다. */
   async setKind(kind: SceneKind): Promise<void> {
