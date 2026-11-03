@@ -1,53 +1,37 @@
-import type { Mode } from "@daengsoon/shared";
-
 /**
- * 소리를 파일 없이 "합성"합니다. 저작권 걱정이 없고, 세기에 따라 소리가 살아 움직입니다.
- * - 불: 낮게 깔린 노이즈(타는 소리) + 무작위로 터지는 짧은 "탁" (장작 튀는 소리)
- * - 물: 느리게 출렁이는 필터를 통과한 노이즈
- * Web Audio API = 브라우저 안의 믹싱 콘솔. 노이즈 → 필터 → 볼륨 → 스피커 순서로 선을 연결합니다.
+ * 소리를 파일 없이 합성합니다. 저작권 걱정이 없고, 가까운 화로에 따라 소리가 살아 움직입니다.
+ * Web Audio API = 브라우저 안의 믹싱 콘솔. 노이즈 → 필터 → 볼륨 → 스피커로 선을 연결합니다.
  */
 export class Ambience {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
   private fireGain: GainNode | null = null;
-  private waterGain: GainNode | null = null;
-  private waterFilter: BiquadFilterNode | null = null;
-  private crackleTimer: number | undefined;
-  private intensity = 0.5;
+  private nearness = 0.3;
   enabled = false;
 
   /** 브라우저는 사용자가 클릭하기 전엔 소리를 못 냅니다(자동재생 차단). 그래서 버튼에서 호출합니다. */
-  async enable(mode: Mode) {
+  async enable() {
     if (!this.ctx) this.build();
     await this.ctx!.resume();
     this.enabled = true;
-    this.setMode(mode);
   }
-
   async disable() {
     this.enabled = false;
     await this.ctx?.suspend();
   }
 
-  setIntensity(v: number) {
-    this.intensity = v;
-    if (!this.ctx) return;
-    const t = this.ctx.currentTime;
-    this.fireGain?.gain.setTargetAtTime(0.25 + v * 0.5, t, 0.5);
-    this.waterFilter?.frequency.setTargetAtTime(300 + v * 500, t, 0.5);
+  /** 0(멀다)~1(바로 앞) */
+  setNearness(v: number) {
+    this.nearness = v;
+    if (!this.ctx || !this.fireGain) return;
+    this.fireGain.gain.setTargetAtTime(0.08 + v * 0.6, this.ctx.currentTime, 0.4);
   }
 
-  setMode(mode: Mode) {
-    if (!this.ctx) return;
-    const t = this.ctx.currentTime;
-    this.fireGain?.gain.setTargetAtTime(mode === "fire" ? 0.25 + this.intensity * 0.5 : 0, t, 0.8);
-    this.waterGain?.gain.setTargetAtTime(mode === "water" ? 0.6 : 0, t, 0.8);
-  }
-
-  /** 장작 넣을 때 "투둑" */
-  pop() {
+  /** 무언가 태울 때 "화르륵" */
+  whoosh() {
     if (!this.ctx || !this.enabled) return;
-    for (let i = 0; i < 4; i++) this.crackle(this.ctx.currentTime + Math.random() * 0.4, 0.5);
+    const t = this.ctx.currentTime;
+    for (let i = 0; i < 6; i++) this.crackle(t + Math.random() * 0.5, 0.6);
   }
 
   private build() {
@@ -59,39 +43,17 @@ export class Ambience {
     this.master = master;
 
     const noise = this.makeNoise(ctx);
-
-    // --- 불 ---
-    const fireLow = ctx.createBiquadFilter();
-    fireLow.type = "lowpass";
-    fireLow.frequency.value = 500;
+    const low = ctx.createBiquadFilter();
+    low.type = "lowpass";
+    low.frequency.value = 500;
     const fireGain = ctx.createGain();
-    fireGain.gain.value = 0;
-    noise.connect(fireLow).connect(fireGain).connect(master);
+    fireGain.gain.value = 0.08 + this.nearness * 0.6;
+    noise.connect(low).connect(fireGain).connect(master);
     this.fireGain = fireGain;
 
-    // --- 물 ---
-    const waterFilter = ctx.createBiquadFilter();
-    waterFilter.type = "bandpass";
-    waterFilter.frequency.value = 600;
-    waterFilter.Q.value = 0.7;
-    const lfo = ctx.createOscillator(); // 아주 느린 진동 → 필터를 흔들어 "출렁임"
-    lfo.frequency.value = 0.15;
-    const lfoGain = ctx.createGain();
-    lfoGain.gain.value = 250;
-    lfo.connect(lfoGain).connect(waterFilter.frequency);
-    lfo.start();
-    const waterGain = ctx.createGain();
-    waterGain.gain.value = 0;
-    noise.connect(waterFilter).connect(waterGain).connect(master);
-    this.waterGain = waterGain;
-    this.waterFilter = waterFilter;
-
-    // 불 탈 때 무작위 "탁탁"
     const schedule = () => {
-      if (this.enabled && (this.fireGain?.gain.value ?? 0) > 0.05) {
-        this.crackle(ctx.currentTime, 0.15 + this.intensity * 0.25);
-      }
-      this.crackleTimer = window.setTimeout(schedule, 80 + Math.random() * (600 - this.intensity * 400));
+      if (this.enabled) this.crackle(ctx.currentTime, 0.1 + this.nearness * 0.3);
+      window.setTimeout(schedule, 120 + Math.random() * (700 - this.nearness * 450));
     };
     schedule();
   }
@@ -110,7 +72,6 @@ export class Ambience {
     osc.stop(at + 0.08);
   }
 
-  /** 2초짜리 핑크빛 노이즈 버퍼를 무한 반복 */
   private makeNoise(ctx: AudioContext) {
     const len = ctx.sampleRate * 2;
     const buf = ctx.createBuffer(1, len, ctx.sampleRate);

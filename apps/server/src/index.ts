@@ -4,11 +4,11 @@ import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
 import type { ClientMessage, ServerMessage } from "@daengsoon/shared";
-import { Room } from "./room.js";
+import { RoomManager } from "./rooms.js";
+import type { Room } from "./room.js";
 
 const PORT = Number(process.env.PORT ?? 8787);
 const here = fileURLToPath(new URL(".", import.meta.url));
-// 배포(production)에서는 빌드된 클라이언트를 이 서버가 그대로 서빙합니다. 서버 하나로 끝.
 const CLIENT_DIST = process.env.CLIENT_DIST ?? join(here, "../../client/dist");
 
 const MIME: Record<string, string> = {
@@ -19,38 +19,27 @@ const MIME: Record<string, string> = {
   ".png": "image/png",
   ".ico": "image/x-icon",
   ".json": "application/json",
+  ".webmanifest": "application/manifest+json",
   ".woff2": "font/woff2",
 };
 
-const room = new Room();
-const clients = new Map<WebSocket, { id: string; lastSeen: number }>();
+const rooms = new RoomManager();
 
-function send(ws: WebSocket, msg: ServerMessage) {
-  if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
-}
-
-function broadcast(msg: ServerMessage) {
-  const data = JSON.stringify(msg);
-  for (const ws of clients.keys()) {
-    if (ws.readyState === WebSocket.OPEN) ws.send(data);
-  }
-}
-
-function broadcastState() {
-  broadcast({ type: "state", state: room.snapshot() });
-}
-
-// ---------- HTTP: 정적 파일 + 헬스체크 ----------
+// ---------- HTTP ----------
 const http = createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", "http://localhost");
 
   if (url.pathname === "/healthz") {
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ ok: true, ...room.snapshot() }));
+    res.end(JSON.stringify({ ok: true, rooms: rooms.list() }));
+    return;
+  }
+  if (url.pathname === "/api/rooms") {
+    res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
+    res.end(JSON.stringify({ rooms: rooms.list(), capacity: RoomManager.capacity }));
     return;
   }
 
-  // 경로 탈출(../) 방지: normalize 후 dist 바깥이면 거부
   const safePath = normalize(url.pathname).replace(/^(\.\.[/\\])+/, "");
   let filePath = join(CLIENT_DIST, safePath);
   if (!filePath.startsWith(CLIENT_DIST)) {
@@ -61,7 +50,6 @@ const http = createServer(async (req, res) => {
     const s = await stat(filePath);
     if (s.isDirectory()) filePath = join(filePath, "index.html");
   } catch {
-    // SPA fallback: 모르는 경로는 index.html
     filePath = join(CLIENT_DIST, "index.html");
   }
   try {
@@ -77,62 +65,63 @@ const http = createServer(async (req, res) => {
   }
 });
 
-// ---------- WebSocket: 실시간 동시접속 ----------
+// ---------- WebSocket ----------
 const wss = new WebSocketServer({ server: http, path: "/ws" });
+const meta = new Map<WebSocket, { id: string; room: Room; lastSeen: number }>();
 
-wss.on("connection", (ws) => {
-  const id = Math.random().toString(36).slice(2, 8);
-  clients.set(ws, { id, lastSeen: Date.now() });
-  room.join();
-  send(ws, { type: "welcome", id, state: room.snapshot() });
-  broadcastState();
+wss.on("connection", (ws, req) => {
+  const url = new URL(req.url ?? "/", "http://localhost");
+  const wanted = url.searchParams.get("room") ?? "auto";
+  const room = wanted === "auto" ? rooms.auto() : rooms.open(wanted);
+
+  const send = (msg: ServerMessage) => {
+    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+  };
+
+  if (!room) {
+    send({ type: "full", rooms: rooms.list() });
+    ws.close(4001, "room full");
+    return;
+  }
+
+  const id = Math.random().toString(36).slice(2, 9);
+  meta.set(ws, { id, room, lastSeen: Date.now() });
+  room.join({ id, send });
 
   ws.on("message", (raw) => {
+    const m = meta.get(ws);
+    if (!m) return;
+    m.lastSeen = Date.now();
     let msg: ClientMessage;
     try {
       msg = JSON.parse(String(raw));
     } catch {
       return;
     }
-    const meta = clients.get(ws);
-    if (!meta) return;
-    meta.lastSeen = Date.now();
-
-    switch (msg.type) {
-      case "ping":
-        send(ws, { type: "pong" });
-        break;
-      case "setMode":
-        if (msg.mode !== "fire" && msg.mode !== "water") return;
-        if (room.setMode(msg.mode)) broadcastState();
-        break;
-      case "poke":
-        room.poke();
-        broadcast({ type: "poke", from: meta.id, at: Date.now() });
-        broadcastState();
-        break;
-    }
+    if (!msg || typeof msg !== "object" || typeof msg.type !== "string") return;
+    m.room.handle(m.id, msg);
   });
 
-  ws.on("close", () => {
-    clients.delete(ws);
-    room.leave();
-    broadcastState();
-  });
+  const bye = () => {
+    const m = meta.get(ws);
+    if (!m) return;
+    meta.delete(ws);
+    m.room.leave(m.id);
+  };
+  ws.on("close", bye);
   ws.on("error", () => ws.close());
 });
 
-// 1초마다 장작이 타들어가는 걸 반영. 변했을 때만 알림.
-setInterval(() => {
-  if (room.tick()) broadcastState();
-}, 1000);
-
-// 끊긴 줄 모르는 연결(좀비) 정리: 30초 동안 아무 말 없으면 끊기
+// 시뮬레이션 20Hz, 전송 10Hz. "계산은 자주, 말은 덜" — 네트워크를 아낍니다.
+setInterval(() => rooms.tickAll(Date.now()), 50);
+setInterval(() => rooms.flushAll(), 100);
+// 좀비 연결 정리 + 빈 방 정리
 setInterval(() => {
   const now = Date.now();
-  for (const [ws, meta] of clients) {
-    if (now - meta.lastSeen > 30_000) ws.terminate();
+  for (const [ws, m] of meta) {
+    if (now - m.lastSeen > 45_000) ws.terminate();
   }
+  rooms.sweep();
 }, 10_000);
 
 http.listen(PORT, () => {

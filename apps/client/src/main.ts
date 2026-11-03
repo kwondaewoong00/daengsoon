@@ -1,34 +1,240 @@
-import type { Mode, RoomState } from "@daengsoon/shared";
+import { ITEMS, BRAZIERS, type PlayerState, type RoomInfo, type ServerMessage, itemById } from "@daengsoon/shared";
 import { Ambience } from "./audio";
-import { FireScene } from "./fire";
-import { WaterScene } from "./water";
+import { Camera } from "./camera";
 import { RoomSocket } from "./socket";
-import type { Scene } from "./scene";
+import { World } from "./world";
 
-const canvas = document.getElementById("scene") as HTMLCanvasElement;
+const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+const canvas = $<HTMLCanvasElement>("scene");
 const ctx = canvas.getContext("2d")!;
-const hud = document.getElementById("hud")!;
-const viewerCount = document.getElementById("viewer-count")!;
-const pokeBtn = document.getElementById("poke") as HTMLButtonElement;
-const soundBtn = document.getElementById("sound") as HTMLButtonElement;
-const fullscreenBtn = document.getElementById("fullscreen") as HTMLButtonElement;
-const modeBtns = [...document.querySelectorAll<HTMLButtonElement>(".mode")];
-const toast = document.getElementById("toast")!;
+const roomNameEl = $("room-name");
+const viewerCount = $("viewer-count");
+const hint = $("hint");
+const burnBar = $("burn-bar");
+const itemsEl = $("items");
+const toast = $("toast");
+const roomsDialog = $<HTMLDialogElement>("rooms");
+const roomList = $("room-list");
 
-const scenes: Record<Mode, Scene> = { fire: new FireScene(), water: new WaterScene() };
+const world = new World();
+const camera = new Camera();
 const audio = new Ambience();
-let mode: Mode = "fire";
-let intensity = 0.5;   // 서버가 알려준 목표값
-let shownIntensity = 0.5; // 화면은 부드럽게 따라감
+let self: PlayerState | null = null;
+let room: RoomInfo | null = null;
+let lastBurn = 0;
 
-// ---------- 캔버스 ----------
+// ---------- 방 선택: ?room=camp-03 이면 그 방, 아니면 auto ----------
+const params = new URLSearchParams(location.search);
+const wantedRoom = params.get("room") ?? "auto";
+
+const socket = new RoomSocket(wantedRoom, onMessage, (s) => {
+  if (s === "connecting") roomNameEl.textContent = "캠프 찾는 중";
+  if (s === "closed") viewerCount.textContent = "–";
+});
+socket.connect();
+
+function onMessage(msg: ServerMessage) {
+  switch (msg.type) {
+    case "welcome":
+      world.clear();
+      world.selfId = msg.id;
+      for (const p of msg.players) world.upsert(p);
+      self = world.avatars.get(msg.id)!.state;
+      setRoom(msg.room);
+      history.replaceState(null, "", `?room=${msg.room.id}`);
+      updateSeatUI();
+      break;
+    case "join":
+      world.upsert(msg.player);
+      break;
+    case "leave":
+      world.remove(msg.id);
+      break;
+    case "update":
+      for (const p of msg.players) {
+        world.patch(p);
+        if (p.id === world.selfId) updateSeatUI();
+      }
+      break;
+    case "room":
+      setRoom(msg.room);
+      break;
+    case "burn": {
+      world.burn(msg.id, msg.seat, msg.item);
+      audio.whoosh();
+      const def = itemById(msg.item);
+      if (def) showToast(msg.id === world.selfId ? def.line : `누군가 ${def.label}를 태웠어요 ${def.emoji}`);
+      break;
+    }
+    case "denied":
+      if (msg.reason === "seat-taken") showToast("방금 누가 앉았어요");
+      if (msg.reason === "cooldown") showToast("불이 아직 삼키는 중이에요");
+      break;
+    case "full":
+      roomNameEl.textContent = "캠프가 가득 찼어요";
+      showRooms(msg.rooms);
+      break;
+  }
+}
+
+function setRoom(r: RoomInfo) {
+  room = r;
+  roomNameEl.textContent = r.name;
+  viewerCount.textContent = String(r.count);
+  document.title = `댕순 — ${r.name} · ${r.count}명이 함께`;
+}
+
+// ---------- 앉기/일어나기 UI ----------
+for (const it of ITEMS) {
+  const b = document.createElement("button");
+  b.className = "item";
+  b.dataset.item = it.id;
+  b.innerHTML = `<span class="e">${it.emoji}</span><span>${it.label}</span>`;
+  b.addEventListener("click", () => {
+    socket.send({ type: "burn", item: it.id });
+    lastBurn = performance.now();
+    setItemsDisabled(true);
+    window.setTimeout(() => setItemsDisabled(false), 2500);
+  });
+  itemsEl.appendChild(b);
+}
+function setItemsDisabled(v: boolean) {
+  for (const b of itemsEl.querySelectorAll<HTMLButtonElement>("button")) b.disabled = v;
+}
+$("stand").addEventListener("click", () => socket.send({ type: "stand" }));
+
+function updateSeatUI() {
+  const seated = self?.seat !== null && self?.seat !== undefined;
+  burnBar.hidden = !seated;
+  hint.hidden = seated;
+  if (seated && performance.now() - lastBurn > 2500) setItemsDisabled(false);
+}
+
+// ---------- 입력: 클릭/탭은 "거기로 걸어가", 통나무 위면 "앉아" ----------
+let pointerDown: { x: number; y: number; t: number } | null = null;
+canvas.addEventListener("pointerdown", (e) => {
+  pointerDown = { x: e.clientX, y: e.clientY, t: performance.now() };
+});
+canvas.addEventListener("pointermove", (e) => {
+  const w = camera.toWorld(e.clientX, e.clientY);
+  world.hoverSeat = world.seatNear(w.x, w.y);
+  canvas.classList.toggle("seat-hover", !!world.hoverSeat);
+});
+canvas.addEventListener("pointerup", (e) => {
+  if (!pointerDown) return;
+  const moved = Math.hypot(e.clientX - pointerDown.x, e.clientY - pointerDown.y);
+  pointerDown = null;
+  if (moved > 12) return; // 드래그는 무시
+  const w = camera.toWorld(e.clientX, e.clientY);
+  const seat = world.seatNear(w.x, w.y);
+  if (seat) socket.send({ type: "sit", seat: seat.id });
+  else socket.send({ type: "move", x: w.x, y: w.y });
+  wakeHud();
+});
+
+// 키보드: 방향키/WASD로 걷기
+const keys = new Set<string>();
+const KEY_DIR: Record<string, [number, number]> = {
+  ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0],
+  KeyW: [0, -1], KeyS: [0, 1], KeyA: [-1, 0], KeyD: [1, 0],
+};
+window.addEventListener("keydown", (e) => {
+  if (e.code in KEY_DIR && !(e.target instanceof HTMLInputElement)) { keys.add(e.code); e.preventDefault(); }
+  if (e.code === "Space" && self?.seat !== null) socket.send({ type: "stand" });
+});
+window.addEventListener("keyup", (e) => keys.delete(e.code));
+window.setInterval(() => {
+  if (!self || keys.size === 0) return;
+  let dx = 0, dy = 0;
+  for (const k of keys) { const d = KEY_DIR[k]; if (d) { dx += d[0]; dy += d[1]; } }
+  if (!dx && !dy) return;
+  const len = Math.hypot(dx, dy);
+  socket.send({ type: "move", x: self.x + (dx / len) * 60, y: self.y + (dy / len) * 60 });
+}, 120);
+
+// ---------- 방 목록 ----------
+$("room-btn").addEventListener("click", async () => {
+  try {
+    const res = await fetch("/api/rooms");
+    const data = (await res.json()) as { rooms: RoomInfo[] };
+    showRooms(data.rooms);
+  } catch {
+    showToast("캠프 목록을 못 가져왔어요");
+  }
+});
+$("rooms-close").addEventListener("click", () => roomsDialog.close());
+function showRooms(rooms: RoomInfo[]) {
+  roomList.innerHTML = "";
+  const list = rooms.length ? rooms : [];
+  for (const r of list) {
+    const li = document.createElement("li");
+    const b = document.createElement("button");
+    b.innerHTML = `<span>${r.name}</span><span>${r.count}/${r.capacity}</span>`;
+    b.disabled = r.count >= r.capacity;
+    b.setAttribute("aria-current", String(r.id === room?.id));
+    b.addEventListener("click", () => { location.search = `?room=${r.id}`; });
+    li.appendChild(b);
+    roomList.appendChild(li);
+  }
+  const li = document.createElement("li");
+  const b = document.createElement("button");
+  b.innerHTML = `<span>새 캠프 열기</span><span>+</span>`;
+  b.addEventListener("click", () => {
+    const used = new Set(list.map((r) => r.id));
+    for (let n = 1; n <= 50; n++) {
+      const id = `camp-${String(n).padStart(2, "0")}`;
+      if (!used.has(id)) { location.search = `?room=${id}`; return; }
+    }
+  });
+  li.appendChild(b);
+  roomList.appendChild(li);
+  roomsDialog.showModal();
+}
+
+// ---------- 소리 / 전체화면 / HUD 숨김 ----------
+$("sound").addEventListener("click", async (e) => {
+  const btn = e.currentTarget as HTMLButtonElement;
+  if (audio.enabled) { await audio.disable(); btn.textContent = "🔇"; btn.setAttribute("aria-pressed", "false"); }
+  else { await audio.enable(); btn.textContent = "🔊"; btn.setAttribute("aria-pressed", "true"); }
+});
+$("fullscreen").addEventListener("click", () => {
+  if (document.fullscreenElement) void document.exitFullscreen();
+  else void document.documentElement.requestFullscreen?.();
+});
+let idleTimer: number | undefined;
+function wakeHud() {
+  $("hud").style.opacity = "1";
+  window.clearTimeout(idleTimer);
+  idleTimer = window.setTimeout(() => { if (burnBar.hidden) $("hud").style.opacity = "0.25"; }, 6000);
+}
+for (const ev of ["pointermove", "pointerdown", "keydown"]) window.addEventListener(ev, wakeHud, { passive: true });
+wakeHud();
+
+void (async () => {
+  try {
+    const nav = navigator as Navigator & { wakeLock?: { request(type: "screen"): Promise<unknown> } };
+    await nav.wakeLock?.request("screen");
+  } catch { /* 지원 안 함 */ }
+})();
+
+function showToast(text: string) {
+  toast.textContent = text;
+  toast.hidden = false;
+  toast.style.animation = "none";
+  void toast.offsetWidth;
+  toast.style.animation = "";
+  window.clearTimeout((showToast as unknown as { t?: number }).t);
+  (showToast as unknown as { t?: number }).t = window.setTimeout(() => (toast.hidden = true), 2500);
+}
+
+// ---------- 렌더 루프 ----------
 function resize() {
   const dpr = Math.min(2, window.devicePixelRatio || 1);
-  const w = window.innerWidth, h = window.innerHeight;
-  canvas.width = Math.floor(w * dpr);
-  canvas.height = Math.floor(h * dpr);
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  for (const s of Object.values(scenes)) s.resize(w, h, dpr);
+  canvas.width = Math.floor(innerWidth * dpr);
+  canvas.height = Math.floor(innerHeight * dpr);
+  canvas.style.width = `${innerWidth}px`;
+  canvas.style.height = `${innerHeight}px`;
+  camera.resize(innerWidth, innerHeight);
 }
 window.addEventListener("resize", resize);
 resize();
@@ -37,93 +243,28 @@ let last = performance.now();
 function frame(now: number) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
-  shownIntensity += (intensity - shownIntensity) * Math.min(1, dt * 2);
-  scenes[mode].draw(ctx, now / 1000, dt, shownIntensity);
+  const t = now / 1000;
+
+  const me = self ? world.avatars.get(self.id) : undefined;
+  if (me) {
+    camera.follow(me.x, me.y);
+    // 가장 가까운 화로까지의 거리로 소리 크기
+    let nearest = Infinity;
+    for (const b of BRAZIERS) nearest = Math.min(nearest, Math.hypot(b.x - me.x, b.y - me.y));
+    audio.setNearness(Math.max(0, 1 - nearest / 420));
+  }
+  camera.update(dt);
+  world.update(dt, t);
+
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = "#0a0806";
+  ctx.fillRect(0, 0, innerWidth, innerHeight);
+  ctx.save();
+  camera.apply(ctx);
+  world.draw(ctx, t);
+  ctx.restore();
+
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
-
-// ---------- 서버 연결 ----------
-const socket = new RoomSocket()
-  .on("state", applyState)
-  .on("poke", (from) => {
-    scenes[mode].burst();
-    audio.pop();
-    if (from !== socket.selfId) showToast(mode === "fire" ? "누군가 장작을 넣었어요 🔥" : "누군가 돌을 던졌어요 💧");
-  })
-  .on("disconnected", () => {
-    viewerCount.textContent = "…";
-  });
-socket.connect();
-
-function applyState(state: RoomState) {
-  intensity = state.intensity;
-  audio.setIntensity(state.intensity);
-  viewerCount.textContent = String(state.viewers);
-  if (state.mode !== mode) setLocalMode(state.mode);
-}
-
-function setLocalMode(next: Mode) {
-  mode = next;
-  document.documentElement.dataset.mode = next;
-  for (const b of modeBtns) b.setAttribute("aria-selected", String(b.dataset.mode === next));
-  pokeBtn.textContent = next === "fire" ? "장작 넣기" : "돌 던지기";
-  document.title = next === "fire" ? "댕순 — 같이 보는 불멍" : "댕순 — 같이 보는 물멍";
-  audio.setMode(next);
-}
-setLocalMode("fire");
-
-// ---------- 조작 ----------
-for (const b of modeBtns) {
-  b.addEventListener("click", () => socket.send({ type: "setMode", mode: b.dataset.mode as Mode }));
-}
-pokeBtn.addEventListener("click", () => socket.send({ type: "poke" }));
-
-soundBtn.addEventListener("click", async () => {
-  if (audio.enabled) {
-    await audio.disable();
-    soundBtn.textContent = "🔇";
-    soundBtn.setAttribute("aria-pressed", "false");
-  } else {
-    await audio.enable(mode);
-    soundBtn.textContent = "🔊";
-    soundBtn.setAttribute("aria-pressed", "true");
-  }
-});
-
-fullscreenBtn.addEventListener("click", () => {
-  if (document.fullscreenElement) void document.exitFullscreen();
-  else void document.documentElement.requestFullscreen?.();
-});
-
-// 가만히 있으면 HUD가 사라지고, 움직이면 다시 나타남 (멍 때리기 방해 금지)
-let idleTimer: number | undefined;
-function wake() {
-  hud.classList.remove("idle");
-  window.clearTimeout(idleTimer);
-  idleTimer = window.setTimeout(() => hud.classList.add("idle"), 4000);
-}
-for (const ev of ["pointermove", "pointerdown", "keydown", "touchstart"]) {
-  window.addEventListener(ev, wake, { passive: true });
-}
-wake();
-
-// 화면 꺼짐 방지 (지원하는 브라우저에서만)
-void (async () => {
-  try {
-    const nav = navigator as Navigator & { wakeLock?: { request(type: "screen"): Promise<unknown> } };
-    await nav.wakeLock?.request("screen");
-  } catch {
-    /* 지원 안 함 — 조용히 넘어감 */
-  }
-})();
-
-function showToast(text: string) {
-  toast.textContent = text;
-  toast.hidden = false;
-  // 애니메이션 재시작
-  toast.style.animation = "none";
-  void toast.offsetWidth;
-  toast.style.animation = "";
-  window.setTimeout(() => (toast.hidden = true), 2300);
-}

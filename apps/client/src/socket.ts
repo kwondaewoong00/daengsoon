@@ -1,67 +1,53 @@
-import type { ClientMessage, RoomState, ServerMessage } from "@daengsoon/shared";
+import type { ClientMessage, ServerMessage } from "@daengsoon/shared";
 
 /**
- * 서버와의 "전화선".
- * HTTP는 편지(보내고 답장 기다림)라면, WebSocket은 전화(한 번 연결하면 양쪽이 아무 때나 말함)입니다.
- * 끊기면 자동으로 다시 걸고, 주기적으로 "여보세요?"(ping)를 보내 선이 살아있는지 확인합니다.
+ * 서버와의 전화선. 끊기면 다시 걸고(지수 백오프), 15초마다 "여보세요?"를 보냅니다.
+ * 메시지 해석은 하지 않고 그대로 넘깁니다. 해석은 main.ts가 합니다.
  */
-export interface SocketEvents {
-  state: (state: RoomState) => void;
-  poke: (from: string) => void;
-  connected: (selfId: string) => void;
-  disconnected: () => void;
-}
-
 export class RoomSocket {
   private ws: WebSocket | null = null;
   private retryMs = 1000;
   private pingTimer: number | undefined;
-  private listeners: Partial<SocketEvents> = {};
-  selfId = "";
+  private closedByUs = false;
 
-  on<K extends keyof SocketEvents>(ev: K, fn: SocketEvents[K]) {
-    this.listeners[ev] = fn;
-    return this;
-  }
+  constructor(
+    private roomId: string,
+    private onMessage: (msg: ServerMessage) => void,
+    private onStatus: (s: "connecting" | "open" | "closed") => void,
+  ) {}
 
   connect() {
+    this.closedByUs = false;
+    this.onStatus("connecting");
     const proto = location.protocol === "https:" ? "wss" : "ws";
-    const ws = new WebSocket(`${proto}://${location.host}/ws`);
+    const ws = new WebSocket(`${proto}://${location.host}/ws?room=${encodeURIComponent(this.roomId)}`);
     this.ws = ws;
 
     ws.onopen = () => {
       this.retryMs = 1000;
+      this.onStatus("open");
       this.pingTimer = window.setInterval(() => this.send({ type: "ping" }), 15_000);
     };
     ws.onmessage = (ev) => {
-      let msg: ServerMessage;
       try {
-        msg = JSON.parse(ev.data);
+        this.onMessage(JSON.parse(ev.data));
       } catch {
-        return;
-      }
-      switch (msg.type) {
-        case "welcome":
-          this.selfId = msg.id;
-          this.listeners.connected?.(msg.id);
-          this.listeners.state?.(msg.state);
-          break;
-        case "state":
-          this.listeners.state?.(msg.state);
-          break;
-        case "poke":
-          this.listeners.poke?.(msg.from);
-          break;
+        /* 깨진 메시지는 무시 */
       }
     };
-    ws.onclose = () => {
+    ws.onclose = (ev) => {
       window.clearInterval(this.pingTimer);
-      this.listeners.disconnected?.();
-      // 지수 백오프: 1초, 2초, 4초 … 최대 10초 간격으로 재시도
+      this.onStatus("closed");
+      if (this.closedByUs || ev.code === 4001) return; // 4001 = 방이 꽉 참. 재시도 안 함
       window.setTimeout(() => this.connect(), this.retryMs);
       this.retryMs = Math.min(10_000, this.retryMs * 2);
     };
     ws.onerror = () => ws.close();
+  }
+
+  close() {
+    this.closedByUs = true;
+    this.ws?.close();
   }
 
   send(msg: ClientMessage) {

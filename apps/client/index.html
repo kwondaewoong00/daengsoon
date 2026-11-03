@@ -2,35 +2,45 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
     <meta name="theme-color" content="#0a0806" />
     <title>댕순 — 같이 보는 불멍</title>
-    <meta name="description" content="모르는 사람들과 같은 모닥불을 바라보는 곳. 물멍도 됩니다." />
+    <meta name="description" content="모르는 사람들과 모닥불 주위에 앉아, 태우고 싶은 걸 태우는 곳." />
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
     <canvas id="scene"></canvas>
 
-    <main id="hud" aria-live="polite">
+    <main id="hud">
       <header class="top">
         <h1 class="brand">댕순</h1>
-        <p class="viewers"><span id="viewer-count">1</span>명이 함께 보고 있어요</p>
-      </header>
-
-      <footer class="bottom">
-        <div class="modes" role="tablist" aria-label="멍 종류">
-          <button class="mode" data-mode="fire" role="tab" aria-selected="true">🔥 불멍</button>
-          <button class="mode" data-mode="water" role="tab" aria-selected="false">🌊 물멍</button>
-        </div>
-        <button id="poke" class="poke">장작 넣기</button>
+        <button id="room-btn" class="pill" title="다른 캠프 보기">
+          <span id="room-name">캠프 찾는 중</span>
+          <span class="dim"> · </span><span id="viewer-count">–</span><span class="dim">/20</span>
+        </button>
         <div class="tools">
           <button id="sound" class="icon" aria-pressed="false" title="소리 켜기/끄기">🔇</button>
           <button id="fullscreen" class="icon" title="전체화면">⛶</button>
+        </div>
+      </header>
+
+      <footer class="bottom">
+        <p id="hint" class="hint">화로 옆 통나무를 누르면 앉아요</p>
+        <div id="burn-bar" class="burn-bar" hidden>
+          <div class="items" id="items"></div>
+          <button id="stand" class="pill">일어나기</button>
         </div>
       </footer>
     </main>
 
     <div id="toast" class="toast" hidden></div>
+
+    <dialog id="rooms" class="rooms">
+      <h2>캠프 고르기</h2>
+      <ul id="room-list"></ul>
+      <button id="rooms-close" class="pill">닫기</button>
+    </dialog>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
