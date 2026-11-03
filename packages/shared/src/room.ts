@@ -53,8 +53,10 @@ export class Room {
     return this.players.size >= ROOM_CAPACITY;
   }
 
-  private seatTakenBy(seat: number): Player | undefined {
+  /** 이 자리를 쓰는(앉았거나 앉으러 가는) 다른 사람. except 본인은 제외 */
+  private seatTakenBy(seat: number, except?: Player): Player | undefined {
     for (const p of this.players.values()) {
+      if (p === except) continue;
       if (p.state.seat === seat || p.reservedSeat === seat) return p;
     }
     return undefined;
@@ -112,8 +114,8 @@ export class Room {
       case "sit": {
         const seat = seatById(msg.seat);
         if (!seat) return;
-        const taken = this.seatTakenBy(seat.id);
-        if (taken && taken !== p) {
+        const taken = this.seatTakenBy(seat.id, p);
+        if (taken) {
           p.client.send({ type: "denied", reason: "seat-taken" });
           return;
         }
@@ -181,9 +183,12 @@ export class Room {
         p.target = null;
         if (p.reservedSeat !== null) {
           const seat = seatById(p.reservedSeat);
-          if (seat && (this.seatTakenBy(seat.id) ?? p) === p) {
+          if (seat && !this.seatTakenBy(seat.id, p)) {
             s.seat = seat.id;
             s.facing = seat.facing;
+          } else {
+            // 도착했는데 그새 누가 앉음 → 못 앉고 서 있음
+            p.client.send({ type: "denied", reason: "seat-taken" });
           }
           p.reservedSeat = null;
         }
