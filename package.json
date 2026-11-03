@@ -1,0 +1,14 @@
+{
+  "name": "daengsoon",
+  "private": true,
+  "version": "0.1.0",
+  "description": "같이 보는 물멍·불멍 — 실시간 동시접속 멍 때리기 사이트",
+  "scripts": {
+    "dev": "pnpm -r --parallel run dev",
+    "build": "pnpm -r run build",
+    "start": "pnpm --filter @daengsoon/server start",
+    "typecheck": "pnpm -r run typecheck"
+  },
+  "packageManager": "pnpm@10.28.0",
+  "engines": { "node": ">=20" }
+}
