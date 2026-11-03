@@ -79,13 +79,14 @@ export class CameraRig {
       // 1인 화로는 바로 코앞(0.5m)이라 눈을 조금 더 들고 뒤로 물러남
       const small = b.size === "small";
       // 큰 모닥불은 불꽃이 1m 넘게 올라오므로 조금 물러나 앉은 눈높이에서 전체가 보이게
-      const eyeH = (small ? 1.15 : 1.22) + Math.sin(this.breath * 1.1) * 0.012;
-      const backOff = small ? 0.25 : 0.55;
+      const eyeH = (small ? 1.05 : 1.1) + Math.sin(this.breath * 1.1) * 0.012;
+      const backOff = small ? 0.3 : 0.6;
       this.targetPos.set(sx + nx * backOff, eyeH, sz + nz * backOff);
       // 시선: 불꽃 아랫부분(장작 위). 고개를 돌리면 그 방향으로
       const toFire = Math.atan2(-nz, -nx) + this.headTurn;
-      const lookDist = small ? 0.9 : 1.6;
-      const lookH = (small ? 0.6 : 0.45) - Math.abs(this.headTurn) * 0.15;
+      // 불은 화면 가운데 아래, 그 위로 하늘·풍경이 보이게 시선을 살짝 올림
+      const lookDist = small ? 1.0 : 1.7;
+      const lookH = (small ? 0.85 : 0.75) - Math.abs(this.headTurn) * 0.15;
       this.targetLook.set(sx + Math.cos(toFire) * lookDist, lookH, sz + Math.sin(toFire) * lookDist);
       // 손을 뗀 뒤 천천히 불 쪽으로 돌아옴
       this.headTurn *= 1 - Math.min(1, dt * 0.35);
@@ -100,10 +101,11 @@ export class CameraRig {
       }
       const px = this.followX * S, pz = this.followY * S;
       const fx = Math.cos(this.yaw), fz = Math.sin(this.yaw);
-      const back = this.portrait ? 4.2 : 4.6;
-      const up = this.portrait ? 2.6 : 2.2;
+      // 낮게 서서 조금 위를 봄 → 하늘이 화면 위 1/3을 차지
+      const back = this.portrait ? 4.0 : 4.4;
+      const up = this.portrait ? 1.9 : 1.8;
       this.targetPos.set(px - fx * back, up, pz - fz * back);
-      this.targetLook.set(px + fx * 2.5, 0.9, pz + fz * 2.5);
+      this.targetLook.set(px + fx * 3.5, 1.7, pz + fz * 3.5);
     }
     const k = this.snap ? 1 : Math.min(1, dt * (seat ? 2.2 : 3.5));
     this.snap = false;
