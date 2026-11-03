@@ -1,5 +1,4 @@
 import * as THREE from "three";
-import { RGBELoader } from "three/examples/jsm/loaders/RGBELoader.js";
 import { WORLD, type SceneKind } from "@daengsoon/shared";
 import { S, currentSeason, groundFor, skyFor } from "./config";
 
@@ -54,8 +53,9 @@ export class Stage {
 
   private async loadSky(id: string, exposure: number, bg: number, envIntensity: number) {
     if (this.loadedSky === id) return;
-    const hdr = await new RGBELoader().loadAsync(`${import.meta.env.BASE_URL}assets/hdri/${id}_1k.hdr`);
+    const hdr = await this.texLoader.loadAsync(`${import.meta.env.BASE_URL}assets/hdri/${id}_1k.jpg`);
     hdr.mapping = THREE.EquirectangularReflectionMapping;
+    hdr.colorSpace = THREE.SRGBColorSpace;
     const env = this.pmrem.fromEquirectangular(hdr).texture;
     this.scene.environment = env;
     this.scene.environmentIntensity = envIntensity;

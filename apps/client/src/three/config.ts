@@ -25,26 +25,12 @@ export function groundFor(kind: SceneKind, season: Season): { id: string; repeat
 }
 
 /**
- * 하늘(HDRI). 파일마다 밝기가 제각각이라(평균 휘도 0.03~0.25) 측정값으로 정규화합니다.
- * mean = 평균 휘도(미리 계산). env = 조명 세기, bg = 배경 밝기.
+ * 하늘. 360도 사진(등장방형 JPG)이 배경이자 조명입니다.
+ * 원본 HDR은 파일마다 밝기가 제각각이라, 변환할 때 평균 휘도를 맞춰 두었습니다(해질녘은 더 어둡게).
+ * 산: 초저녁 B1 → 늦은 밤 B9(멀리 마을 불빛). 바다: 초저녁 B12(별) → 늦은 밤 B6(달빛)
  */
-const SKY_MEAN: Record<string, { mean: number; median: number }> = {
-  kloppenheim_02: { mean: 0.246, median: 0.082 },   // B1 해질녘 들판
-  moonlit_golf: { mean: 0.035, median: 0.022 },     // B6 달밤
-  satara_night: { mean: 0.187, median: 0.043 },     // B9 밤, 멀리 불빛
-  dikhololo_night: { mean: 0.065, median: 0.018 },  // B12 별 많은 밤
-};
-function normalize(id: string) {
-  const m = SKY_MEAN[id] ?? { mean: 0.1, median: 0.05 };
-  // 해가 남아 있는 하늘(평균 휘도 높음)은 조명을 더 눌러야 불이 주인공이 됩니다
-  const target = m.mean > 0.15 ? 0.045 : 0.09;
-  const env = Math.min(2.5, Math.max(0.15, target / m.mean));
-  const bg = Math.min(3, Math.max(0.4, 0.05 / m.median));
-  return { id, env, bg, exposure: m.mean > 0.15 ? 0.65 : 0.8 };
-}
-/** 산: 초저녁 B1 → 늦은 밤 B9(멀리 마을 불빛). 바다: 초저녁 B12(별) → 늦은 밤 B6(달빛) */
 export function skyFor(kind: SceneKind, hour = new Date().getHours()) {
   const late = hour >= 22 || hour < 5;
-  if (kind === "sea") return normalize(late ? "moonlit_golf" : "dikhololo_night");
-  return normalize(late ? "satara_night" : "kloppenheim_02");
+  const id = kind === "sea" ? (late ? "moonlit_golf" : "dikhololo_night") : late ? "satara_night" : "kloppenheim_02";
+  return { id, env: 1.0, bg: 1.0, exposure: 0.85 };
 }
