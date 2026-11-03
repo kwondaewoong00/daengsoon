@@ -1,4 +1,5 @@
-import { ITEMS, BRAZIERS, SCENES, roomKind, roomIdValid, makeRoomId, seatById, type PlayerState, type RoomInfo, type SceneKind, type ServerMessage, itemById } from "@daengsoon/shared";
+import { ITEMS, BRAZIERS, SCENES, SPECIES, SHIRT_HUES, PUBLIC_ROOMS, MAX_ROOMS, roomKind, roomIdValid, roomNumber, makeRoomId, seatById, randomNick, type PlayerState, type RoomInfo, type SceneKind, type Species, type ServerMessage, itemById } from "@daengsoon/shared";
+import { renderPortraits } from "./portraits";
 import { Ambience } from "./audio";
 import { RoomSocket } from "./socket";
 import { LocalServer } from "./demo";
@@ -38,15 +39,25 @@ const params = new URLSearchParams(location.search);
 // 자동 테스트용: ?debug 일 때만 월드를 밖으로 노출
 if (params.has("debug")) (window as unknown as { __world?: World }).__world = world;
 
-// ---------- 입장: "당신은 누구신가요?" ----------
+// ---------- 첫 화면(로비) ----------
 const wantedRoom = params.get("room") && roomIdValid(params.get("room")!) ? params.get("room")! : "auto";
-const entry = $<HTMLDialogElement>("entry");
+const lobby = $("lobby");
 const entryForm = $<HTMLFormElement>("entry-form");
+const nickInput = $<HTMLInputElement>("nick");
+const speciesGrid = $("species-grid");
+const swatches = $("swatches");
+let chosenSpecies: Species = "dog";
+let chosenHue = SHIRT_HUES[0];
+
 {
   let saved: Record<string, string> = {};
   try { saved = JSON.parse(localStorage.getItem("daengsoon:who") ?? "{}"); } catch { /* 무시 */ }
-  for (const [name, value] of Object.entries(saved)) {
-    const input = entryForm.querySelector<HTMLInputElement>(`input[name="${name}"][value="${value}"]`);
+  if (saved.nick) nickInput.value = saved.nick;
+  nickInput.placeholder = `예: ${randomNick()}`;
+  if (SPECIES.some((sp) => sp.id === saved.species)) chosenSpecies = saved.species as Species;
+  if (saved.hue && SHIRT_HUES.includes(Number(saved.hue))) chosenHue = Number(saved.hue);
+  for (const name of ["age", "gender", "kind"]) {
+    const input = entryForm.querySelector<HTMLInputElement>(`input[name="${name}"][value="${saved[name]}"]`);
     if (input) input.checked = true;
   }
   const presetKind = params.get("kind");
@@ -56,30 +67,103 @@ const entryForm = $<HTMLFormElement>("entry-form");
   }
   if (wantedRoom !== "auto") {
     $("kind-field").hidden = true;
+    $("go-auto").textContent = roomNumber(wantedRoom) > PUBLIC_ROOMS ? "초대받은 캠프 들어가기" : `${SCENES[roomKind(wantedRoom)].emoji} ${roomNumber(wantedRoom)}번 캠프 들어가기`;
+    $("go-friends").hidden = true;
     const k = entryForm.querySelector<HTMLInputElement>(`input[name="kind"][value="${roomKind(wantedRoom)}"]`);
     if (k) k.checked = true;
   }
 }
-entryForm.addEventListener("submit", () => {
-  const data = new FormData(entryForm);
-  const who = { gender: String(data.get("gender")), age: String(data.get("age")), kind: String(data.get("kind")) };
-  try { localStorage.setItem("daengsoon:who", JSON.stringify(who)); } catch { /* 무시 */ }
-  start(who.kind as SceneKind, who.gender, who.age);
-});
-entry.addEventListener("cancel", (e) => e.preventDefault());
-entry.showModal();
 
-async function start(kind: SceneKind, gender: string, age: string) {
+// 옷 색
+for (const hue of SHIRT_HUES) {
+  const label = document.createElement("label");
+  const sat = hue === 0 ? 0 : 60, light = hue === 0 ? 22 : hue === 220 ? 30 : 68;
+  label.innerHTML = `<input type="radio" name="hue" value="${hue}" ${hue === chosenHue ? "checked" : ""}><span class="sw" style="background:hsl(${hue} ${sat}% ${light}%)"></span>`;
+  swatches.appendChild(label);
+}
+swatches.addEventListener("change", () => {
+  chosenHue = Number((entryForm.querySelector('input[name="hue"]:checked') as HTMLInputElement).value);
+  buildSpecies();
+});
+// 동물 친구: 실제 3D 모델을 그려서 초상화로
+function buildSpecies() {
+  let portraits: Record<Species, string> | null = null;
+  try { portraits = renderPortraits(chosenHue); } catch (e) { console.warn("portrait render failed", e); }
+  speciesGrid.innerHTML = "";
+  for (const sp of SPECIES) {
+    const label = document.createElement("label");
+    label.innerHTML = `<input type="radio" name="species" value="${sp.id}" ${sp.id === chosenSpecies ? "checked" : ""}><div class="pick">${portraits ? `<img alt="${sp.label}" src="${portraits[sp.id]}">` : ""}<span>${sp.label}</span></div>`;
+    speciesGrid.appendChild(label);
+  }
+}
+speciesGrid.addEventListener("change", () => {
+  chosenSpecies = (entryForm.querySelector('input[name="species"]:checked') as HTMLInputElement).value as Species;
+});
+buildSpecies();
+
+function readProfile() {
+  const data = new FormData(entryForm);
+  const who = {
+    nick: nickInput.value.trim().slice(0, 12),
+    species: chosenSpecies,
+    hue: String(chosenHue),
+    gender: String(data.get("gender")),
+    age: String(data.get("age")),
+    kind: String(data.get("kind")),
+  };
+  try { localStorage.setItem("daengsoon:who", JSON.stringify(who)); } catch { /* 무시 */ }
+  return who;
+}
+entryForm.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const who = readProfile();
+  start(who.kind as SceneKind, who, wantedRoom);
+});
+// 친구랑 캠프 만들기: 21~50번 중 하나를 골라 링크로만 들어오는 캠프
+$("go-friends").addEventListener("click", () => {
+  const who = readProfile();
+  const n = PUBLIC_ROOMS + 1 + Math.floor(Math.random() * (MAX_ROOMS - PUBLIC_ROOMS));
+  start(who.kind as SceneKind, who, makeRoomId(who.kind as SceneKind, n));
+});
+// 캠프 코드: "산 37", "바다 3", "37" 모두 허용
+$("go-code").addEventListener("click", () => {
+  const raw = $<HTMLInputElement>("code").value.trim();
+  const m = /^(산|바다|mountain|sea)?\s*(\d{1,2})$/.exec(raw);
+  if (!m) { showToast("캠프 코드는 '산 37'처럼 적어요"); return; }
+  const who = readProfile();
+  const kind: SceneKind = /바다|sea/.test(m[1] ?? "") ? "sea" : m[1] ? "mountain" : (who.kind as SceneKind);
+  const id = makeRoomId(kind, Number(m[2]));
+  if (!roomIdValid(id)) { showToast("없는 캠프 번호예요"); return; }
+  start(kind, who, id);
+});
+
+// 첫 화면의 "지금 N명"
+async function refreshLive() {
+  const el = $("live-text");
+  if (DEMO) { el.textContent = "체험판 · 봇 5명이 불 앞에 앉아 있어요"; return; }
+  try {
+    const r = await (await fetch("/api/rooms")).json() as { rooms: RoomInfo[]; total: number };
+    el.textContent = r.total > 0 ? `지금 ${r.total}명이 불 앞에 앉아 있어요 · 캠프 ${r.rooms.length}곳` : "지금은 아무도 없어요. 첫 불을 피워 보세요";
+  } catch {
+    el.textContent = "서버에 연결하는 중…";
+  }
+}
+void refreshLive();
+window.setInterval(refreshLive, 10_000);
+
+async function start(kind: SceneKind, who: { nick: string; species: string; hue: string; gender: string; age: string }, roomId: string) {
+  lobby.classList.add("fade");
+  window.setTimeout(() => (lobby.hidden = true), 900);
   loading.hidden = false;
   audio.setKind(kind);
-  // 하늘·땅을 받는 동안 서버 연결도 같이 진행
+  const query = { kind, nick: who.nick, species: who.species, hue: who.hue, g: who.gender, a: who.age };
   const onStatus = (s: "connecting" | "open" | "closed") => {
     if (s === "connecting") roomNameEl.textContent = "캠프 찾는 중";
     if (s === "closed") viewerCount.textContent = "–";
   };
   socket = DEMO
-    ? new LocalServer(kind, { g: gender, a: age }, onMessage, onStatus)
-    : new RoomSocket(wantedRoom, { kind, g: gender, a: age }, onMessage, onStatus);
+    ? new LocalServer(kind, query, onMessage, onStatus)
+    : new RoomSocket(roomId, query, onMessage, onStatus);
   socket.connect();
   try {
     await world.setKind(kind);
@@ -299,7 +383,24 @@ $("room-btn").addEventListener("click", async () => {
   }
 });
 $("rooms-close").addEventListener("click", () => roomsDialog.close());
+function inviteUrl() {
+  const u = new URL(location.href);
+  u.search = "";
+  if (room) u.searchParams.set("room", room.id);
+  return u.toString();
+}
+$("invite-copy").addEventListener("click", async () => {
+  const url = inviteUrl();
+  const nav = navigator as Navigator & { share?: (d: { title?: string; text?: string; url?: string }) => Promise<void> };
+  try {
+    if (nav.share) { await nav.share({ title: "댕순", text: `${room?.name ?? "캠프"}에서 같이 불멍해요`, url }); return; }
+  } catch { /* 공유 취소 */ }
+  try { await navigator.clipboard.writeText(url); showToast("초대 링크를 복사했어요"); }
+  catch { showToast("주소창의 링크를 복사해 주세요"); }
+});
 function showRooms(rooms: RoomInfo[]) {
+  $("invite-name").textContent = room ? `${room.name} 초대하기` : "이 캠프";
+  $("invite-url").textContent = inviteUrl().replace(/^https?:\/\//, "");
   roomList.innerHTML = "";
   for (const r of rooms) {
     const li = document.createElement("li");

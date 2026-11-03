@@ -64,12 +64,13 @@ export class Room {
     // 입구(아래쪽 가운데)에 살짝 흩어져서 등장
     const state: PlayerState = {
       id: client.id,
-      name: randomNick(),
+      name: profile.nick || randomNick(),
+      species: profile.species,
       gender: profile.gender,
       age: profile.age,
       x: WORLD.w / 2 + (Math.random() - 0.5) * 160,
       y: WORLD.h - 60 - Math.random() * 40,
-      hue: Math.floor(Math.random() * 360),
+      hue: profile.hue,
       seat: null,
       moving: false,
       facing: -Math.PI / 2,

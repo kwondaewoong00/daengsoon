@@ -1,4 +1,4 @@
-import { BRAZIERS, ITEMS, Room, SEATS, WORLD, parseProfile, roomName, type ClientMessage, type SceneKind, type ServerMessage } from "@daengsoon/shared";
+import { BRAZIERS, ITEMS, Room, SEATS, SPECIES, WORLD, parseProfile, roomName, type ClientMessage, type SceneKind, type ServerMessage } from "@daengsoon/shared";
 
 /**
  * 체험판(서버 없음). 진짜 서버가 쓰는 Room 클래스를 브라우저 안에서 그대로 돌리고,
@@ -15,7 +15,7 @@ export class LocalServer {
 
   constructor(
     private kind: SceneKind,
-    private profile: { g: string; a: string },
+    private profile: Record<string, string>,
     private onMessage: (msg: ServerMessage) => void,
     private onStatus: (s: "connecting" | "open" | "closed") => void,
   ) {
@@ -29,11 +29,11 @@ export class LocalServer {
     const n = 5;
     for (let i = 0; i < n; i++) {
       const id = `bot${i}`;
-      this.room.join({ id, send: () => {} }, parseProfile(Math.random() < 0.5 ? "f" : "m", String([10, 20, 30, 40, 50, 60][Math.floor(Math.random() * 6)])));
+      this.room.join({ id, send: () => {} }, parseProfile({ species: SPECIES[i % SPECIES.length].id, g: Math.random() < 0.5 ? "f" : "m", a: String([10, 20, 30, 40, 50, 60][Math.floor(Math.random() * 6)]) }));
       this.bots.push({ id, phase: "wander", until: 0.5 + Math.random() * 3 });
     }
     // 내가 들어감
-    this.room.join({ id: this.selfId, send }, parseProfile(this.profile.g, this.profile.a));
+    this.room.join({ id: this.selfId, send }, parseProfile(this.profile));
     this.onStatus("open");
     this.timers.push(
       window.setInterval(() => this.room.tick(Date.now()), 50),

@@ -78,13 +78,14 @@ export class CameraRig {
       // 1인칭: 앉은 내 눈 높이(약 0.95m)에서 불을 바라봄. 숨쉬듯 아주 살짝 흔들림
       // 1인 화로는 바로 코앞(0.5m)이라 눈을 조금 더 들고 뒤로 물러남
       const small = b.size === "small";
-      const eyeH = (small ? 1.15 : 1.0) + Math.sin(this.breath * 1.1) * 0.012;
-      const backOff = small ? 0.25 : 0.05;
+      // 큰 모닥불은 불꽃이 1m 넘게 올라오므로 조금 물러나 앉은 눈높이에서 전체가 보이게
+      const eyeH = (small ? 1.15 : 1.22) + Math.sin(this.breath * 1.1) * 0.012;
+      const backOff = small ? 0.25 : 0.55;
       this.targetPos.set(sx + nx * backOff, eyeH, sz + nz * backOff);
-      // 시선: 불꽃 한가운데. 고개를 돌리면 그 방향으로
+      // 시선: 불꽃 아랫부분(장작 위). 고개를 돌리면 그 방향으로
       const toFire = Math.atan2(-nz, -nx) + this.headTurn;
-      const lookDist = small ? 0.9 : 1.2;
-      const lookH = (small ? 0.75 : 0.7) - Math.abs(this.headTurn) * 0.15;
+      const lookDist = small ? 0.9 : 1.6;
+      const lookH = (small ? 0.75 : 0.55) - Math.abs(this.headTurn) * 0.15;
       this.targetLook.set(sx + Math.cos(toFire) * lookDist, lookH, sz + Math.sin(toFire) * lookDist);
       // 손을 뗀 뒤 천천히 불 쪽으로 돌아옴
       this.headTurn *= 1 - Math.min(1, dt * 0.35);

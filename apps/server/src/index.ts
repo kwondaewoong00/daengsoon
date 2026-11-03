@@ -35,7 +35,7 @@ const http = createServer(async (req, res) => {
   }
   if (url.pathname === "/api/rooms") {
     res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
-    res.end(JSON.stringify({ rooms: rooms.list(), capacity: RoomManager.capacity }));
+    res.end(JSON.stringify({ rooms: rooms.list(), capacity: RoomManager.capacity, total: rooms.totalCount() }));
     return;
   }
 
@@ -72,7 +72,8 @@ wss.on("connection", (ws, req) => {
   const url = new URL(req.url ?? "/", "http://localhost");
   const wanted = url.searchParams.get("room") ?? "auto";
   const kind = url.searchParams.get("kind") === "sea" ? "sea" : "mountain";
-  const profile = parseProfile(url.searchParams.get("g"), url.searchParams.get("a"));
+  const q = url.searchParams;
+  const profile = parseProfile({ nick: q.get("nick"), species: q.get("species"), hue: q.get("hue"), g: q.get("g"), a: q.get("a") });
   const room = wanted === "auto" ? rooms.auto(kind) : rooms.open(wanted);
 
   const send = (msg: ServerMessage) => {

@@ -11,6 +11,8 @@ export const WORLD = { w: 1400, h: 1000 } as const;
 export const HORIZON_Y = 190;
 export const ROOM_CAPACITY = 20;
 export const MAX_ROOMS = 50;
+/** 1~20: 자동 배정 캠프, 21~50: 친구랑 만든 캠프(링크로만 들어옴) */
+export const PUBLIC_ROOMS = 20;
 /** 캐릭터 걷는 속도 (월드 단위/초) */
 export const WALK_SPEED = 170;
 /** 자리에 이 거리 안으로 오면 "앉음" 처리 */
@@ -73,12 +75,31 @@ export function seatById(id: number): Seat | undefined {
 export type Gender = "m" | "f";
 export type AgeBand = 10 | 20 | 30 | 40 | 50 | 60;
 export const AGE_BANDS: readonly AgeBand[] = [10, 20, 30, 40, 50, 60];
-export interface Profile { gender: Gender; age: AgeBand }
-export function parseProfile(g: string | null, a: string | null): Profile {
-  const gender: Gender = g === "f" ? "f" : "m";
-  const n = Number(a);
+
+/** 동물 친구. 머리 모양과 털색이 다릅니다. */
+export type Species = "dog" | "cat" | "rabbit" | "bear" | "fox" | "panda";
+export const SPECIES: readonly { id: Species; label: string }[] = [
+  { id: "dog", label: "댕댕" },
+  { id: "cat", label: "냥이" },
+  { id: "rabbit", label: "토끼" },
+  { id: "bear", label: "곰돌" },
+  { id: "fox", label: "여우" },
+  { id: "panda", label: "판다" },
+];
+/** 옷 색 팔레트(hue). 산티아고·경도 식 파스텔 */
+export const SHIRT_HUES: readonly number[] = [8, 42, 130, 200, 262, 330, 0, 220];
+
+export interface Profile { nick: string; species: Species; hue: number; gender: Gender; age: AgeBand }
+export const NICK_MAX = 12;
+export function parseProfile(q: { nick?: string | null; species?: string | null; hue?: string | null; g?: string | null; a?: string | null }): Profile {
+  const gender: Gender = q.g === "f" ? "f" : "m";
+  const n = Number(q.a);
   const age = (AGE_BANDS as readonly number[]).includes(n) ? (n as AgeBand) : 20;
-  return { gender, age };
+  const species = (SPECIES.find((s) => s.id === q.species)?.id ?? "dog") as Species;
+  const hueN = Number(q.hue);
+  const hue = Number.isFinite(hueN) ? ((Math.round(hueN) % 360) + 360) % 360 : SHIRT_HUES[Math.floor(Math.random() * SHIRT_HUES.length)];
+  const nick = (q.nick ?? "").replace(/[\u0000-\u001f<>]/g, "").trim().slice(0, NICK_MAX);
+  return { nick, species, hue, gender, age };
 }
 
 // ---------- 이름표 ----------
@@ -113,8 +134,9 @@ export function itemById(id: string): ItemDef | undefined {
 // ---------- 상태 ----------
 export interface PlayerState {
   id: string;
-  /** 서버가 지어주는 이름표. 예: "다정한 이끼" */
+  /** 이름표. 직접 지은 별명이 없으면 서버가 지어줌. 예: "다정한 이끼" */
   name: string;
+  species: Species;
   gender: Gender;
   age: AgeBand;
   x: number;

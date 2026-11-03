@@ -6,6 +6,9 @@
     <meta name="theme-color" content="#0a0806" />
     <title>댕순 — 같이 보는 불멍</title>
     <meta name="description" content="모르는 사람들과 모닥불 주위에 앉아, 태우고 싶은 걸 태우는 곳." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Jua&family=Noto+Sans+KR:wght@400;600;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
@@ -75,45 +78,80 @@
 
     <div id="toast" class="toast" hidden></div>
 
-    <dialog id="entry" class="entry">
-      <form method="dialog" id="entry-form">
-        <h2>당신은 누구신가요?</h2>
-        <p class="sub">말은 안 해도 돼요. 불 옆에 앉을 사람이 누군지만 알려주세요.</p>
+    <section id="lobby" class="lobby" aria-label="시작 화면">
+      <div class="lobby-inner">
+        <div class="brand-mark">댕순</div>
+        <p class="eyebrow">오늘은 뭘 태울까?</p>
+        <h1 class="hero-title"><span class="mark">불멍</span>할 사람</h1>
+        <p class="lead">모르는 사람들이랑 모닥불에 둘러앉아, 태우고 싶은 걸 태우고 가요. 말은 안 해도 돼요.</p>
+        <div class="live"><span class="dot"></span><span id="live-text">불을 피우는 중…</span></div>
 
-        <fieldset>
-          <legend>성별</legend>
-          <div class="chips" id="gender-chips">
-            <label><input type="radio" name="gender" value="m" checked /><span>남자</span></label>
-            <label><input type="radio" name="gender" value="f" /><span>여자</span></label>
+        <form id="entry-form" class="panel">
+          <h2>내 캐릭터</h2>
+
+          <label class="field">
+            <span class="field-label">별명</span>
+            <input id="nick" name="nick" type="text" maxlength="12" autocomplete="nickname" placeholder="예: 다정한 이끼" />
+          </label>
+
+          <div class="field">
+            <span class="field-label">동물 친구</span>
+            <div class="species" id="species-grid" role="radiogroup" aria-label="동물 친구"></div>
           </div>
-        </fieldset>
 
-        <fieldset>
-          <legend>나이</legend>
-          <div class="chips" id="age-chips">
-            <label><input type="radio" name="age" value="10" /><span>10대</span></label>
-            <label><input type="radio" name="age" value="20" checked /><span>20대</span></label>
-            <label><input type="radio" name="age" value="30" /><span>30대</span></label>
-            <label><input type="radio" name="age" value="40" /><span>40대</span></label>
-            <label><input type="radio" name="age" value="50" /><span>50대</span></label>
-            <label><input type="radio" name="age" value="60" /><span>60대</span></label>
+          <div class="field">
+            <span class="field-label">옷 색</span>
+            <div class="swatches" id="swatches" role="radiogroup" aria-label="옷 색"></div>
           </div>
-        </fieldset>
 
-        <fieldset id="kind-field">
-          <legend>어디로 갈까요</legend>
-          <div class="chips kinds">
-            <label><input type="radio" name="kind" value="mountain" checked /><span>🏔️ 산<small>귀뚜라미 소리</small></span></label>
-            <label><input type="radio" name="kind" value="sea" /><span>🌊 바다<small>파도 소리</small></span></label>
+          <div class="field two">
+            <div>
+              <span class="field-label">나이</span>
+              <div class="chips small" id="age-chips">
+                <label><input type="radio" name="age" value="10" /><span>10대</span></label>
+                <label><input type="radio" name="age" value="20" checked /><span>20대</span></label>
+                <label><input type="radio" name="age" value="30" /><span>30대</span></label>
+                <label><input type="radio" name="age" value="40" /><span>40대</span></label>
+                <label><input type="radio" name="age" value="50" /><span>50대</span></label>
+                <label><input type="radio" name="age" value="60" /><span>60대</span></label>
+              </div>
+            </div>
+            <div>
+              <span class="field-label">성별</span>
+              <div class="chips small">
+                <label><input type="radio" name="gender" value="m" checked /><span>남</span></label>
+                <label><input type="radio" name="gender" value="f" /><span>여</span></label>
+              </div>
+            </div>
           </div>
-        </fieldset>
 
-        <button type="submit" class="go">불 옆에 앉으러 가기</button>
-      </form>
-    </dialog>
+          <div class="field" id="kind-field">
+            <span class="field-label">어디로 갈까요</span>
+            <div class="chips kinds">
+              <label><input type="radio" name="kind" value="mountain" checked /><span>🏔️ 산<small>귀뚜라미 소리</small></span></label>
+              <label><input type="radio" name="kind" value="sea" /><span>🌊 바다<small>파도 소리</small></span></label>
+            </div>
+          </div>
+
+          <div class="cta">
+            <button type="submit" class="go" id="go-auto">바로 들어가기</button>
+            <button type="button" class="go secondary" id="go-friends">👫 친구랑 캠프 만들기</button>
+            <div class="code-row">
+              <input id="code" type="text" inputmode="numeric" placeholder="🔑 캠프 코드 (예: 산 37)" />
+              <button type="button" class="go secondary small" id="go-code">입장</button>
+            </div>
+          </div>
+        </form>
+        <p class="foot">설치 없이 폰 · PC 브라우저에서 바로</p>
+      </div>
+    </section>
 
     <dialog id="rooms" class="rooms">
       <h2>캠프 고르기</h2>
+      <div class="invite">
+        <div class="invite-text"><strong id="invite-name">이 캠프</strong><span id="invite-url" class="dim"></span></div>
+        <button id="invite-copy" class="pill">초대 링크 복사</button>
+      </div>
       <ul id="room-list"></ul>
       <button id="rooms-close" class="pill">닫기</button>
     </dialog>
