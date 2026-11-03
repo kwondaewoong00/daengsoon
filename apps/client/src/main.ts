@@ -1,35 +1,32 @@
 import { ITEMS, BRAZIERS, SCENES, roomKind, roomIdValid, makeRoomId, seatById, type PlayerState, type RoomInfo, type SceneKind, type ServerMessage, itemById } from "@daengsoon/shared";
 import { Ambience } from "./audio";
-import { Camera } from "./camera";
 import { RoomSocket } from "./socket";
 import { World } from "./world";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const canvas = $<HTMLCanvasElement>("scene");
-const ctx = canvas.getContext("2d")!;
 const roomNameEl = $("room-name");
 const viewerCount = $("viewer-count");
 const hint = $("hint");
 const burnBar = $("burn-bar");
 const itemsEl = $("items");
 const toast = $("toast");
+const loading = $("loading");
 const roomsDialog = $<HTMLDialogElement>("rooms");
 const roomList = $("room-list");
 
-const world = new World();
-const camera = new Camera();
-// 자동 테스트용: ?debug 일 때만 카메라를 밖으로 노출
-if (params_debug()) (window as unknown as { __camera?: Camera }).__camera = camera;
-function params_debug() { return new URLSearchParams(location.search).has("debug"); }
+const world = new World(canvas);
 const audio = new Ambience();
 let self: PlayerState | null = null;
 let room: RoomInfo | null = null;
 let lastBurn = 0;
 let socket: RoomSocket;
 
-// ---------- 입장: "당신은 누구신가요?" ----------
-// 매번 묻되, 지난번 선택은 미리 채워 둡니다.
 const params = new URLSearchParams(location.search);
+// 자동 테스트용: ?debug 일 때만 월드를 밖으로 노출
+if (params.has("debug")) (window as unknown as { __world?: World }).__world = world;
+
+// ---------- 입장: "당신은 누구신가요?" ----------
 const wantedRoom = params.get("room") && roomIdValid(params.get("room")!) ? params.get("room")! : "auto";
 const entry = $<HTMLDialogElement>("entry");
 const entryForm = $<HTMLFormElement>("entry-form");
@@ -40,7 +37,6 @@ const entryForm = $<HTMLFormElement>("entry-form");
     const input = entryForm.querySelector<HTMLInputElement>(`input[name="${name}"][value="${value}"]`);
     if (input) input.checked = true;
   }
-  // 특정 캠프로 바로 온 경우엔 종류를 고를 필요가 없음
   if (wantedRoom !== "auto") {
     $("kind-field").hidden = true;
     const k = entryForm.querySelector<HTMLInputElement>(`input[name="kind"][value="${roomKind(wantedRoom)}"]`);
@@ -53,17 +49,26 @@ entryForm.addEventListener("submit", () => {
   try { localStorage.setItem("daengsoon:who", JSON.stringify(who)); } catch { /* 무시 */ }
   start(who.kind as SceneKind, who.gender, who.age);
 });
-entry.addEventListener("cancel", (e) => e.preventDefault()); // ESC로 못 닫음: 답해야 들어감
+entry.addEventListener("cancel", (e) => e.preventDefault());
 entry.showModal();
 
-function start(kind: SceneKind, gender: string, age: string) {
-  world.kind = kind;
+async function start(kind: SceneKind, gender: string, age: string) {
+  loading.hidden = false;
   audio.setKind(kind);
+  // 하늘·땅을 받는 동안 서버 연결도 같이 진행
   socket = new RoomSocket(wantedRoom, { kind, g: gender, a: age }, onMessage, (s) => {
     if (s === "connecting") roomNameEl.textContent = "캠프 찾는 중";
     if (s === "closed") viewerCount.textContent = "–";
   });
   socket.connect();
+  try {
+    await world.setKind(kind);
+  } catch (e) {
+    console.error("풍경 로딩 실패", e);
+    showToast("풍경을 불러오지 못했어요. 새로고침해 주세요");
+  }
+  loading.classList.add("fade");
+  window.setTimeout(() => (loading.hidden = true), 900);
 }
 
 function onMessage(msg: ServerMessage) {
@@ -72,11 +77,11 @@ function onMessage(msg: ServerMessage) {
       world.clear();
       world.selfId = msg.id;
       for (const p of msg.players) world.upsert(p);
-      self = world.avatars.get(msg.id)!.state;
+      self = world.chars.get(msg.id)!.state;
       setRoom(msg.room);
-      world.kind = msg.room.kind;
+      if (world.kind !== msg.room.kind) void world.setKind(msg.room.kind);
       audio.setKind(msg.room.kind);
-      history.replaceState(null, "", `?room=${msg.room.id}`);
+      history.replaceState(null, "", `?room=${msg.room.id}${params.has("debug") ? "&debug" : ""}`);
       updateSeatUI();
       break;
     case "join":
@@ -144,35 +149,27 @@ function updateSeatUI() {
   hint.hidden = seated;
   document.body.classList.toggle("seated", seated);
   if (seated && performance.now() - lastBurn > 2500) setItemsDisabled(false);
-  // 앉으면 그 화로로 카메라가 들어감. 일어나면 다시 넓게.
-  const seat = seated ? seatById(self!.seat!) : undefined;
-  if (seat) {
-    const b = BRAZIERS[seat.brazier];
-    camera.focusOn(b.x, b.y, b.size === "large" ? 240 : 180);
-  } else {
-    camera.clearFocus();
-  }
+  world.rig.focusSeat(seated ? self!.seat! : null);
 }
 
-// ---------- 입력: 클릭/탭은 "거기로 걸어가", 통나무 위면 "앉아" ----------
-let pointerDown: { x: number; y: number; t: number } | null = null;
-canvas.addEventListener("pointerdown", (e) => {
-  pointerDown = { x: e.clientX, y: e.clientY, t: performance.now() };
-});
+// ---------- 입력: 탭은 "거기로 걸어가", 그루터기 위면 "앉아" ----------
+let pointerDown: { x: number; y: number } | null = null;
+canvas.addEventListener("pointerdown", (e) => { pointerDown = { x: e.clientX, y: e.clientY }; });
 canvas.addEventListener("pointermove", (e) => {
-  const w = camera.toWorld(e.clientX, e.clientY);
-  world.hoverSeat = world.seatNear(w.x, w.y);
-  canvas.classList.toggle("seat-hover", !!world.hoverSeat);
+  const w = world.pickGround(e.clientX, e.clientY);
+  const seat = w ? world.seatNear(w.x, w.y) : null;
+  world.setHoverSeat(seat);
+  canvas.classList.toggle("seat-hover", !!seat);
 });
 canvas.addEventListener("pointerup", (e) => {
   if (!pointerDown) return;
   const moved = Math.hypot(e.clientX - pointerDown.x, e.clientY - pointerDown.y);
   pointerDown = null;
-  if (moved > 12) return; // 드래그는 무시
-  const w = camera.toWorld(e.clientX, e.clientY);
-  const seat = world.seatNear(w.x, w.y, camera.focused ? 36 : 48);
-  if (camera.focused) {
-    // 앉아 있을 땐 같은 화로의 다른 빈자리로 옮기는 것만 허용. 나머지 탭은 무시(실수로 일어나지 않게)
+  if (moved > 12) return;
+  const w = world.pickGround(e.clientX, e.clientY);
+  if (!w) return;
+  const seat = world.seatNear(w.x, w.y, world.rig.focused ? 40 : 55);
+  if (world.rig.focused) {
     const mine = self?.seat !== null && self?.seat !== undefined ? seatById(self!.seat!) : undefined;
     if (seat && mine && seat.brazier === mine.brazier) socket.send({ type: "sit", seat: seat.id });
     return;
@@ -182,7 +179,6 @@ canvas.addEventListener("pointerup", (e) => {
   wakeHud();
 });
 
-// 키보드: 방향키/WASD로 걷기
 const keys = new Set<string>();
 const KEY_DIR: Record<string, [number, number]> = {
   ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0],
@@ -194,7 +190,7 @@ window.addEventListener("keydown", (e) => {
 });
 window.addEventListener("keyup", (e) => keys.delete(e.code));
 window.setInterval(() => {
-  if (!self || keys.size === 0 || camera.focused) return;
+  if (!self || keys.size === 0 || world.rig.focused) return;
   let dx = 0, dy = 0;
   for (const k of keys) { const d = KEY_DIR[k]; if (d) { dx += d[0]; dy += d[1]; } }
   if (!dx && !dy) return;
@@ -215,8 +211,7 @@ $("room-btn").addEventListener("click", async () => {
 $("rooms-close").addEventListener("click", () => roomsDialog.close());
 function showRooms(rooms: RoomInfo[]) {
   roomList.innerHTML = "";
-  const list = rooms.length ? rooms : [];
-  for (const r of list) {
+  for (const r of rooms) {
     const li = document.createElement("li");
     const b = document.createElement("button");
     b.innerHTML = `<span>${SCENES[r.kind].emoji} ${r.name}</span><span>${r.count}/${r.capacity}</span>`;
@@ -231,7 +226,7 @@ function showRooms(rooms: RoomInfo[]) {
     const b = document.createElement("button");
     b.innerHTML = `<span>${SCENES[kind].emoji} 새 ${SCENES[kind].label} 캠프 열기</span><span>+</span>`;
     b.addEventListener("click", () => {
-      const used = new Set(list.map((r) => r.id));
+      const used = new Set(rooms.map((r) => r.id));
       for (let n = 1; n <= 50; n++) {
         const id = makeRoomId(kind, n);
         if (!used.has(id)) { location.search = `?room=${id}`; return; }
@@ -243,7 +238,7 @@ function showRooms(rooms: RoomInfo[]) {
   roomsDialog.showModal();
 }
 
-// ---------- 소리 / 전체화면 / HUD 숨김 ----------
+// ---------- 소리 / 전체화면 / HUD ----------
 $("sound").addEventListener("click", async (e) => {
   const btn = e.currentTarget as HTMLButtonElement;
   if (audio.enabled) { await audio.disable(); btn.textContent = "🔇"; btn.setAttribute("aria-pressed", "false"); }
@@ -269,54 +264,39 @@ void (async () => {
   } catch { /* 지원 안 함 */ }
 })();
 
+let toastTimer: number | undefined;
 function showToast(text: string) {
   toast.textContent = text;
   toast.hidden = false;
   toast.style.animation = "none";
   void toast.offsetWidth;
   toast.style.animation = "";
-  window.clearTimeout((showToast as unknown as { t?: number }).t);
-  (showToast as unknown as { t?: number }).t = window.setTimeout(() => (toast.hidden = true), 2500);
+  window.clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => (toast.hidden = true), 2500);
 }
 
 // ---------- 렌더 루프 ----------
 function resize() {
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
-  canvas.width = Math.floor(innerWidth * dpr);
-  canvas.height = Math.floor(innerHeight * dpr);
   canvas.style.width = `${innerWidth}px`;
   canvas.style.height = `${innerHeight}px`;
-  camera.resize(innerWidth, innerHeight);
+  world.resize(innerWidth, innerHeight);
 }
 window.addEventListener("resize", resize);
 resize();
 
 let last = performance.now();
 function frame(now: number) {
-  const dt = Math.min(0.05, (now - last) / 1000);
+  const raw = (now - last) / 1000;
+  const dt = Math.min(0.05, raw);
   last = now;
-  const t = now / 1000;
-
-  const me = self ? world.avatars.get(self.id) : undefined;
-  if (me) {
-    camera.follow(me.x, me.y);
-    // 가장 가까운 화로까지의 거리로 소리 크기
-    let nearest = Infinity;
-    for (const b of BRAZIERS) nearest = Math.min(nearest, Math.hypot(b.x - me.x, b.y - me.y));
-    audio.setNearness(Math.max(0, 1 - nearest / 420));
+  if (self) {
+    const me = world.chars.get(self.id);
+    if (me) audio.setNearness(Math.max(0, 1 - world.nearestFireDistance(me.x, me.y) / 420));
   }
-  camera.update(dt);
-  world.update(dt, t);
-
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.fillStyle = "#0a0806";
-  ctx.fillRect(0, 0, innerWidth, innerHeight);
-  ctx.save();
-  camera.apply(ctx);
-  world.draw(ctx, t);
-  ctx.restore();
-
+  world.update(dt, Math.min(0.3, raw));
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
+
+// 쓰이지 않는 import 방지
+void BRAZIERS;

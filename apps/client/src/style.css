@@ -15,6 +15,11 @@ html, body {
   -webkit-tap-highlight-color: transparent; user-select: none;
 }
 #scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: crosshair; }
+.loading { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: #0a0806; color: var(--muted); font-size: 14px; z-index: 5; transition: opacity 0.8s var(--ease); }
+.loading[hidden] { display: none; }
+.loading.fade { opacity: 0; pointer-events: none; }
+.loading .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: breathe 1.6s ease-in-out infinite; }
+@keyframes breathe { 50% { opacity: 0.2; transform: scale(0.7); } }
 #scene.seat-hover { cursor: pointer; }
 
 #hud {
