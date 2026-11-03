@@ -1,0 +1,5 @@
+모든 소리는 OpenGameArt.org 의 CC0 (퍼블릭 도메인) 파일을 변환한 것입니다.
+- fire_loop.mp3  : "Fireplace Sound loop"  https://opengameart.org/content/fireplace-sound-loop
+- crackle.mp3    : "Fire Crackling"        https://opengameart.org/content/fire-crackling
+- wave_1/2.mp3   : "Beach Ocean Waves"     https://opengameart.org/content/beach-ocean-waves
+- crickets.mp3   : "Crickets Ambient Noise" https://opengameart.org/content/crickets-ambient-noise-loopable
